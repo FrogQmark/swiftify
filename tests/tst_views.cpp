@@ -2276,7 +2276,7 @@ private slots:
     {
         QTest::addColumn<QString>("type");
         for (const char *type : {"HomeView", "SearchView", "PlaylistsView", "SavedSongsView", "LocalFilesView", "LocalTracksView", "Sidebar",
-                                 "PlayerBar", "SettingsPages", "EmptyState", "Stickers", "ShapeIcon"}) {
+                                 "PlayerBar", "NowPlayingPanel", "SettingsPages", "EmptyState", "Stickers", "ShapeIcon"}) {
             QTest::addRow("%s", type) << QString::fromLatin1(type);
         }
     }
@@ -2685,7 +2685,7 @@ private slots:
     {
         QTest::addColumn<QString>("type");
         for (const char *type : {"SoundPanel", "SleepTimerPanel", "ImmersiveQueue", "ImmersiveLyrics", "SegmentedControl",
-                                 "StyledSwitch", "RollingText", "PlayerBar", "LyricsPanel", "QueuePanel", "Sidebar",
+                                 "StyledSwitch", "RollingText", "PlayerBar", "LyricsPanel", "QueuePanel", "NowPlayingPanel", "Sidebar",
                                  "PageHost", "HomeView", "SearchView", "ArtistView", "AlbumView", "PlaylistView", "PlaylistsView", "SavedSongsView", "LocalFilesView", "LocalTracksView", "StartupView",
                                  "SetupView", "CompactMeter", "MaterialShape", "ShapeIcon", "SquiggleRing", "WavyLine",
                                  "LoadingSpinner", "ShapeButton", "WavyPill", "ToolbarButton", "PlayButton"}) {

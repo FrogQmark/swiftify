@@ -122,6 +122,13 @@ Platform.MenuBar {
             checked: Player.showingQueue
             onTriggered: Player.toggleQueuePanel()
         }
+        Platform.MenuItem {
+            text: "Now Playing"
+            shortcut: "Ctrl+Alt+N"
+            checkable: true
+            checked: Player.showingNowPlaying
+            onTriggered: Player.toggleNowPlayingPanel()
+        }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: UiState.immersiveOpen ? "Close Immersive Player" : "Immersive Player"
