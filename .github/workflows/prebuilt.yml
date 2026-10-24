@@ -50,6 +50,21 @@ jobs:
           modules: qtshadertools
           cache: true
 
+      - uses: Swatinem/rust-cache@82a92a6e8fbeee08c6c4d4b12c3534b58e727e4e # v2.7.8
+        with:
+          workspaces: spotify-core
+
+      - name: setup sccache
+        uses: mozilla/sccache-action@99b9cf95c3258c422475143a57121b6d08170e17 # v0.0.9
+
+      - name: configure compiler cache
+        shell: bash
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> "$GITHUB_ENV"
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+
       - name: build
         shell: pwsh
         run: >
