@@ -31,6 +31,7 @@ ApplicationWindow {
         if (!rightPanelFits) {
             Player.showingLyrics = false
             Player.showingQueue = false
+            Player.showingNowPlaying = false
         }
     }
     onRightPanelFitsChanged: closeCrowdedPanels()
@@ -353,7 +354,8 @@ ApplicationWindow {
         Item {
             id: inspector
             objectName: "mainInspector"
-            readonly property bool shown: (Player.showingLyrics || Player.showingQueue) && !UiState.immersiveOpen
+            readonly property bool shown: (Player.showingLyrics || Player.showingQueue || Player.showingNowPlaying)
+                                          && !UiState.immersiveOpen
                                           && !UiState.needsSetup && window.rightPanelFits
             anchors.right: parent.right
             anchors.rightMargin: shown ? 8 : 0
@@ -388,6 +390,12 @@ ApplicationWindow {
                 QueuePanel {
                     anchors.fill: parent
                     Reveal.shown: Player.showingQueue
+                }
+                NowPlayingPanel {
+                    anchors.fill: parent
+                    Reveal.shown: Player.showingNowPlaying
+                    suspended: UiState.immersiveOpen
+                    onImmersiveRequested: UiState.immersiveOpen = true
                 }
             }
         }

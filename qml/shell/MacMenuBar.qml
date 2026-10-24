@@ -135,6 +135,13 @@ Platform.MenuBar {
             shortcut: "Ctrl+K"
             onTriggered: root.catalogueSearchRequested()
         }
+        Platform.MenuItem {
+            text: "Now Playing"
+            shortcut: "Ctrl+Alt+N"
+            checkable: true
+            checked: Player.showingNowPlaying
+            onTriggered: Player.toggleNowPlayingPanel()
+        }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: UiState.immersiveOpen ? qsTr("Close Immersive Player") : qsTr("Immersive Player")
