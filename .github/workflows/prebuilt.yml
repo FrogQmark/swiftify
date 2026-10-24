@@ -50,12 +50,12 @@ jobs:
           modules: qtshadertools
           cache: true
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee08c6c4d4b12c3534b58e727e4e # v2.7.8
+      - uses: Swatinem/rust-cache@v2
         with:
           workspaces: spotify-core
 
       - name: setup sccache
-        uses: mozilla/sccache-action@99b9cf95c3258c422475143a57121b6d08170e17 # v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: configure compiler cache
         shell: bash
