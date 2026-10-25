@@ -52,6 +52,10 @@ class PlaybackController : public QObject {
     Q_PROPERTY(bool canSkipForward READ canSkipForward NOTIFY queueChanged FINAL)
     Q_PROPERTY(swiftify::SongListModel *upNext READ upNext CONSTANT FINAL)
     Q_PROPERTY(swiftify::SongListModel *previouslyPlayed READ previouslyPlayed CONSTANT FINAL)
+    Q_PROPERTY(swiftify::Song nextSong READ getNextSong NOTIFY queueChanged FINAL)
+    Q_PROPERTY(bool hasNextSong READ hasNextSong NOTIFY queueChanged FINAL)
+    Q_PROPERTY(swiftify::Song previousSong READ getPreviousSong NOTIFY queueChanged FINAL)
+    Q_PROPERTY(bool hasPreviousSong READ hasPreviousSong NOTIFY queueChanged FINAL)
 
     Q_PROPERTY(swiftify::LyricsModel *lyrics READ lyrics CONSTANT FINAL)
     Q_PROPERTY(bool hasLyrics READ hasLyrics NOTIFY lyricsChanged FINAL)
@@ -115,6 +119,10 @@ public:
     QList<Song> previouslyPlayedSongs() const;
     std::optional<Song> upcomingSong() const;
     std::optional<Song> precedingSong() const;
+    Song getNextSong() const { return upcomingSong().value_or(Song {}); }
+    bool hasNextSong() const { return upcomingSong().has_value(); }
+    Song getPreviousSong() const { return precedingSong().value_or(Song {}); }
+    bool hasPreviousSong() const { return precedingSong().has_value(); }
     /// the queue in play order, shuffled or not, for the media session
     const QList<Song> &activeQueue() const;
     int currentQueueIndex() const;

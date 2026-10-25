@@ -103,6 +103,19 @@ private slots:
         QCOMPARE(rig.player.contextId(), QStringLiteral("p123"));
     }
 
+    void nextAndPreviousSongPropertiesUpdate()
+    {
+        Rig rig;
+        QVERIFY(!rig.player.hasNextSong());
+        QVERIFY(!rig.player.hasPreviousSong());
+        const QList<Song> queue = makeQueue(3);
+        rig.player.play(queue[1], queue);
+        QVERIFY(rig.player.hasNextSong());
+        QVERIFY(rig.player.hasPreviousSong());
+        QCOMPARE(rig.player.getNextSong().name, QStringLiteral("song2"));
+        QCOMPARE(rig.player.getPreviousSong().name, QStringLiteral("song0"));
+    }
+
     void lastTrackQueueAndPositionSurviveRestartWithoutStartingSound()
     {
         QTemporaryDir directory;

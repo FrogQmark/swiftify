@@ -334,10 +334,159 @@ Item {
         anchors.topMargin: 8
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.bottom: queueFooter.visible ? queueFooter.top : parent.bottom
+        anchors.bottomMargin: queueFooter.visible ? 8 : 0
         visible: Player.hasSong
         suspended: root.suspended || !root.visible
         scheme: root.scheme
+    }
+
+    Rectangle {
+        id: queueFooter
+        anchors.left: parent.left
+        anchors.leftMargin: 16
+        anchors.right: parent.right
+        anchors.rightMargin: 16
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 14
+        radius: 12
+        color: Qt.alpha(root.scheme.surfaceContainerHighest, 0.4)
+        visible: Player.hasSong && !root.lyricsMaximized && (Player.hasNextSong || Player.hasPreviousSong)
+        height: queueContent.implicitHeight + 16
+
+        Column {
+            id: queueContent
+            anchors.left: parent.left
+            anchors.leftMargin: 12
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 8
+
+            Column {
+                width: parent.width
+                spacing: 6
+                visible: Player.hasNextSong
+
+                StyledText {
+                    width: parent.width
+                    text: qsTr("Next in queue")
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                    font.capitalization: Font.AllUppercase
+                    color: root.scheme.onSurfaceVariant
+                    elide: Text.ElideRight
+                }
+
+                Item {
+                    id: nextSongRow
+                    width: parent.width
+                    height: 38
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        radius: 6
+                        color: nextSongHover.hovered ? Qt.alpha(root.scheme.onSurface, 0.06) : "transparent"
+                    }
+
+                    HoverHandler {
+                        id: nextSongHover
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                    TapHandler {
+                        onTapped: Player.skipForward()
+                    }
+
+                    ArtworkImage {
+                        id: nextArt
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 36
+                        height: 36
+                        radius: 4
+                        source: Player.nextSong.artworkUrl
+                    }
+
+                    Column {
+                        anchors.left: nextArt.right
+                        anchors.leftMargin: 10
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+
+                        StyledText {
+                            width: parent.width
+                            text: Player.nextSong.name
+                            font.pixelSize: Appearance.fontSize.small
+                            font.weight: Font.DemiBold
+                            color: root.scheme.onSurface
+                            elide: Text.ElideRight
+                        }
+
+                        StyledText {
+                            width: parent.width
+                            text: Player.nextSong.artists
+                            font.pixelSize: Appearance.fontSize.smaller
+                            color: root.scheme.onSurfaceVariant
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: parent.width
+                height: 1
+                color: root.scheme.outlineVariant
+                opacity: 0.25
+                visible: Player.hasNextSong && Player.hasPreviousSong
+            }
+
+            Item {
+                id: previousSongRow
+                width: parent.width
+                height: 18
+                visible: Player.hasPreviousSong
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -3
+                    radius: 4
+                    color: prevSongHover.hovered ? Qt.alpha(root.scheme.onSurface, 0.06) : "transparent"
+                }
+
+                HoverHandler {
+                    id: prevSongHover
+                    cursorShape: Qt.PointingHandCursor
+                }
+                TapHandler {
+                    onTapped: Player.skipToPreviousSong()
+                }
+
+                Row {
+                    anchors.fill: parent
+                    spacing: 6
+
+                    ArtworkImage {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 14
+                        height: 14
+                        radius: 2
+                        source: Player.previousSong.artworkUrl
+                    }
+
+                    StyledText {
+                        width: parent.width - 20
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Player.previousSong.name
+                        font.pixelSize: Appearance.fontSize.smaller
+                        color: root.scheme.onSurfaceVariant
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+        }
     }
 
     EmptyState {
