@@ -397,6 +397,11 @@ ApplicationWindow {
                     suspended: UiState.immersiveOpen
                     onImmersiveRequested: UiState.immersiveOpen = true
                 }
+                CornerCaps {
+                    anchors.fill: parent
+                    radius: Appearance.rounding.large
+                    color: window.color
+                }
             }
         }
 

@@ -53,6 +53,25 @@ private slots:
         QCOMPARE(reopened.language(), QStringLiteral("system"));
     }
 
+    void nowPlayingLyricsMaximizedPersists()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("swiftify.conf"));
+        {
+            Settings settings(path);
+            QVERIFY(!settings.nowPlayingLyricsMaximized());
+            QSignalSpy spy(&settings, &Settings::nowPlayingLyricsMaximizedChanged);
+            settings.setNowPlayingLyricsMaximized(true);
+            settings.setNowPlayingLyricsMaximized(true);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(settings.nowPlayingLyricsMaximized());
+        }
+        Settings reopened(path);
+        QVERIFY(reopened.nowPlayingLyricsMaximized());
+        reopened.setNowPlayingLyricsMaximized(false);
+        QVERIFY(!reopened.nowPlayingLyricsMaximized());
+    }
+
     void defaultsMatchTheMacApp()
     {
         QTemporaryDir directory;

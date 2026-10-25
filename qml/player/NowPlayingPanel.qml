@@ -15,6 +15,8 @@ Item {
     property bool suspended: false
     signal immersiveRequested()
 
+    readonly property bool lyricsMaximized: Settings.nowPlayingLyricsMaximized
+
     clip: true
 
     function shade(index: int): color {
@@ -65,6 +67,7 @@ Item {
     // them keeps its contrast
     Rectangle {
         anchors.fill: parent
+        radius: Appearance.rounding.large
         color: Qt.alpha(Appearance.colors.layer1, 0.35)
     }
 
@@ -86,7 +89,7 @@ Item {
         // the cover gives way to the lyrics in a short window
         width: Math.max(120, Math.min(root.width - 32, root.height * 0.38))
         spacing: 4
-        visible: Player.hasSong
+        visible: Player.hasSong && !root.lyricsMaximized
 
         Item {
             id: cover
@@ -181,11 +184,44 @@ Item {
         }
     }
 
+    Item {
+        id: lyricsHeader
+        anchors.top: root.lyricsMaximized ? header.bottom : info.bottom
+        anchors.topMargin: root.lyricsMaximized ? 8 : 12
+        anchors.left: parent.left
+        anchors.leftMargin: 18
+        anchors.right: parent.right
+        anchors.rightMargin: 18
+        height: 32
+        visible: Player.hasSong
+
+        StyledText {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: qsTr("Lyrics")
+            font.pixelSize: Appearance.fontSize.normal
+            font.weight: Font.DemiBold
+            color: root.scheme.onSurface
+        }
+
+        IconButton {
+            id: maximizeLyricsButton
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            scheme: root.scheme
+            size: 32
+            iconSize: 20
+            symbol: root.lyricsMaximized ? "close_fullscreen" : "open_in_full"
+            tooltip: root.lyricsMaximized ? qsTr("Restore") : qsTr("Maximize")
+            onClicked: Settings.nowPlayingLyricsMaximized = !Settings.nowPlayingLyricsMaximized
+        }
+    }
+
     // the lyrics fill what is left under the song
     LyricsPanel {
         id: lyrics
-        anchors.top: info.bottom
-        anchors.topMargin: 8
+        anchors.top: lyricsHeader.bottom
+        anchors.topMargin: 4
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

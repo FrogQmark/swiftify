@@ -43,6 +43,7 @@ class Settings : public QObject {
     Q_PROPERTY(bool debuggingEnabled READ debuggingEnabled WRITE setDebuggingEnabled NOTIFY debuggingEnabledChanged FINAL)
     Q_PROPERTY(bool pinnedPlaylistsExpanded READ pinnedPlaylistsExpanded WRITE setPinnedPlaylistsExpanded NOTIFY pinnedPlaylistsExpandedChanged FINAL)
     Q_PROPERTY(bool allPlaylistsExpanded READ allPlaylistsExpanded WRITE setAllPlaylistsExpanded NOTIFY allPlaylistsExpandedChanged FINAL)
+    Q_PROPERTY(bool nowPlayingLyricsMaximized READ nowPlayingLyricsMaximized WRITE setNowPlayingLyricsMaximized NOTIFY nowPlayingLyricsMaximizedChanged FINAL)
     Q_PROPERTY(QString immersivePlayerPanel READ immersivePlayerPanel WRITE setImmersivePlayerPanel NOTIFY immersivePlayerPanelChanged FINAL)
     Q_PROPERTY(QString sleepTimerFade READ sleepTimerFade WRITE setSleepTimerFade NOTIFY sleepTimerFadeChanged FINAL)
     Q_PROPERTY(bool reduceMotion READ reduceMotion WRITE setReduceMotion NOTIFY reduceMotionChanged FINAL)
@@ -139,6 +140,8 @@ public:
     void setPinnedPlaylistsExpanded(bool value);
     bool allPlaylistsExpanded() const { return m_allPlaylistsExpanded; }
     void setAllPlaylistsExpanded(bool value);
+    bool nowPlayingLyricsMaximized() const { return m_nowPlayingLyricsMaximized; }
+    void setNowPlayingLyricsMaximized(bool value);
     QString immersivePlayerPanel() const { return m_immersivePlayerPanel; }
     void setImmersivePlayerPanel(const QString &value);
     QString sleepTimerFade() const { return m_sleepTimerFade; }
@@ -206,6 +209,7 @@ signals:
     void debuggingEnabledChanged();
     void pinnedPlaylistsExpandedChanged();
     void allPlaylistsExpandedChanged();
+    void nowPlayingLyricsMaximizedChanged();
     void immersivePlayerPanelChanged();
     void sleepTimerFadeChanged();
     void reduceMotionChanged();
@@ -251,6 +255,7 @@ private:
     bool m_debuggingEnabled = false;
     bool m_pinnedPlaylistsExpanded = false;
     bool m_allPlaylistsExpanded = false;
+    bool m_nowPlayingLyricsMaximized = false;
     QString m_immersivePlayerPanel = QStringLiteral("lyrics");
     QString m_sleepTimerFade = QStringLiteral("finalSeconds");
     bool m_reduceMotion = false;
