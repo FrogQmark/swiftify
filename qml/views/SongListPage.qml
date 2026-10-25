@@ -22,6 +22,9 @@ ListView {
     property string emptyDescription
     property bool allowsPlaylistRemoval: false
     property bool reorderable: false
+    property string contextType
+    property string contextName
+    property string contextId
 
     readonly property real margin: Appearance.sizes.pageMargin
 
@@ -89,6 +92,9 @@ ListView {
         width: root.width - 2 * root.margin
         songs: root.songs
         allowsPlaylistRemoval: root.allowsPlaylistRemoval
+        contextType: root.contextType
+        contextName: root.contextName
+        contextId: root.contextId
 
         // reordering: hold and drag a row; a line shows where it will land
         DragHandler {

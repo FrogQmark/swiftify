@@ -89,6 +89,20 @@ private:
     };
 
 private slots:
+    void playbackContextUpdates()
+    {
+        Rig rig;
+        QCOMPARE(rig.player.contextType(), QString());
+        QCOMPARE(rig.player.contextName(), QString());
+        QCOMPARE(rig.player.contextId(), QString());
+        QSignalSpy spy(&rig.player, &PlaybackController::contextChanged);
+        rig.player.setContext(QStringLiteral("playlist"), QStringLiteral("Test Playlist"), QStringLiteral("p123"));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(rig.player.contextType(), QStringLiteral("playlist"));
+        QCOMPARE(rig.player.contextName(), QStringLiteral("Test Playlist"));
+        QCOMPARE(rig.player.contextId(), QStringLiteral("p123"));
+    }
+
     void lastTrackQueueAndPositionSurviveRestartWithoutStartingSound()
     {
         QTemporaryDir directory;

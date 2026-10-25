@@ -21,6 +21,9 @@ SongListPage {
     songs: Library.albumSongs
     loading: Library.loadingSongs
     loadingText: qsTr("Loading album…")
+    contextType: "album"
+    contextName: root.album.name
+    contextId: root.album.id
 
     hero: CollectionHero {
         artworkUrl: root.album.artworkUrl
@@ -39,7 +42,10 @@ SongListPage {
                 burst: "play"
                 text: qsTr("Play")
                 enabled: Library.albumSongs.count > 0
-                onClicked: Player.playFromModel(Library.albumSongs, 0)
+                onClicked: {
+                    Player.setContext("album", root.album.name, root.album.id)
+                    Player.playFromModel(Library.albumSongs, 0)
+                }
             }
         ]
     }

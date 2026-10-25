@@ -15,6 +15,9 @@ T.AbstractButton {
     property bool showsNumber: true
     property bool fromSearch: false
     property bool allowsPlaylistRemoval: false
+    property string contextType
+    property string contextName
+    property string contextId
 
     readonly property bool isCurrent: Player.hasSong && Player.currentSong.instanceId === song.instanceId
     readonly property bool saved: Library.savedRevision >= 0 && Library.isSaved(song.uri)
@@ -39,7 +42,14 @@ T.AbstractButton {
     leftPadding: 14
     rightPadding: 14
 
-    onClicked: Player.playFromModel(songs, index, fromSearch)
+    onClicked: {
+        if (contextType.length > 0) {
+            Player.setContext(contextType, contextName, contextId)
+        } else if (fromSearch) {
+            Player.setContext("search", Library.searchQuery.trim().length > 0 ? Library.searchQuery.trim() : qsTr("Search"))
+        }
+        Player.playFromModel(songs, index, fromSearch)
+    }
 
     background: Rectangle {
         radius: 8

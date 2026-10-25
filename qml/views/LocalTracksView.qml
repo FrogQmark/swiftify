@@ -9,6 +9,8 @@ SongListPage {
     id: root
 
     songs: LocalFiles.songs
+    contextType: "local"
+    contextName: qsTr("Local Tracks")
     loading: LocalFiles.scanning && LocalFiles.songs.count === 0
     loadingText: qsTr("Looking through your music…")
     showsEmpty: LocalFiles.songs.count === 0
@@ -63,7 +65,10 @@ SongListPage {
                 burst: "play"
                 text: qsTr("Play")
                 enabled: LocalFiles.songs.count > 0
-                onClicked: Player.playFromModel(LocalFiles.songs, 0)
+                onClicked: {
+                    Player.setContext("local", qsTr("Local Tracks"))
+                    Player.playFromModel(LocalFiles.songs, 0)
+                }
             },
             // play's twin in the primary's softer tone
             TextButton {
@@ -81,7 +86,10 @@ SongListPage {
                 colRipple: shuffleButton.scheme.primaryContainerActive
                 labelColor: shuffleButton.scheme.onPrimaryContainer
                 enabled: LocalFiles.songs.count > 0
-                onClicked: Player.shufflePlay(LocalFiles.songs)
+                onClicked: {
+                    Player.setContext("local", qsTr("Local Tracks"))
+                    Player.shufflePlay(LocalFiles.songs)
+                }
             },
             TextButton {
                 iconOnly: parent ? parent.compactActions : false

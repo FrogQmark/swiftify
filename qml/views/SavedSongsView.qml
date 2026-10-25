@@ -7,6 +7,8 @@ SongListPage {
     id: root
 
     songs: Library.savedSongs
+    contextType: "saved"
+    contextName: qsTr("Favourite Songs")
     loading: Library.loadingSavedSongs && Library.savedSongs.count === 0
     showsEmpty: Library.savedSongs.count === 0
     emptySymbol: "star"
@@ -52,7 +54,10 @@ SongListPage {
                 burst: "play"
                 text: qsTr("Play")
                 enabled: Library.savedSongs.count > 0
-                onClicked: Player.playFromModel(Library.savedSongs, 0)
+                onClicked: {
+                    Player.setContext("saved", qsTr("Favourite Songs"))
+                    Player.playFromModel(Library.savedSongs, 0)
+                }
             }
         ]
     }

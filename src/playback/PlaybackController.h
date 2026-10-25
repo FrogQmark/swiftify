@@ -65,6 +65,10 @@ class PlaybackController : public QObject {
     Q_PROPERTY(bool showingQueue READ isShowingQueue WRITE setShowingQueue NOTIFY panelsChanged FINAL)
     Q_PROPERTY(bool showingNowPlaying READ isShowingNowPlaying WRITE setShowingNowPlaying NOTIFY panelsChanged FINAL)
 
+    Q_PROPERTY(QString contextType READ contextType NOTIFY contextChanged FINAL)
+    Q_PROPERTY(QString contextName READ contextName NOTIFY contextChanged FINAL)
+    Q_PROPERTY(QString contextId READ contextId NOTIFY contextChanged FINAL)
+
     Q_PROPERTY(bool sleepTimerRunning READ isSleepTimerRunning NOTIFY sleepTimerChanged FINAL)
     Q_PROPERTY(QDateTime sleepTimerDeadline READ sleepTimerDeadline NOTIFY sleepTimerChanged FINAL)
     /// the running timer's whole length in seconds, for how much is left
@@ -130,6 +134,10 @@ public:
     void setShowingQueue(bool showing);
     void setShowingNowPlaying(bool showing);
 
+    QString contextType() const { return m_contextType; }
+    QString contextName() const { return m_contextName; }
+    QString contextId() const { return m_contextId; }
+
     bool isSleepTimerRunning() const { return m_sleepTimerDeadline.isValid(); }
     QDateTime sleepTimerDeadline() const { return m_sleepTimerDeadline; }
     double sleepTimerDuration() const { return m_sleepTimerDurationSeconds; }
@@ -184,6 +192,7 @@ public:
     Q_INVOKABLE void toggleLyricsPanel();
     Q_INVOKABLE void toggleQueuePanel();
     Q_INVOKABLE void toggleNowPlayingPanel();
+    Q_INVOKABLE void setContext(const QString &type, const QString &name = QString(), const QString &id = QString());
     Q_INVOKABLE void seekToLyricLine(int index);
     Q_INVOKABLE void startSleepTimer(int seconds, const QString &fade);
     Q_INVOKABLE void cancelSleepTimer();
@@ -208,6 +217,7 @@ signals:
     void lyricsChanged();
     void activeLyricIndexChanged();
     void panelsChanged();
+    void contextChanged();
     void sleepTimerChanged();
     void analysisActiveChanged();
     /// a song started from search results, for the search history
@@ -321,6 +331,9 @@ private:
     bool m_showingLyrics = true;
     bool m_showingQueue = false;
     bool m_showingNowPlaying = false;
+    QString m_contextType;
+    QString m_contextName;
+    QString m_contextId;
 
     QTimer m_sleepTimer;
     QDateTime m_sleepTimerDeadline;

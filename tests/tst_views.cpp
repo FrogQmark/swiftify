@@ -3189,8 +3189,8 @@ private slots:
 
         // Controls on right: x is window width - controls width - 12
         QCOMPARE(controls->x(), window->width() - controls->width() - 12.0);
-        // Inspector moved down by 36: top margin 44 (8 + 36)
-        QCOMPARE(inspector->property("y").toReal(), 44.0);
+        // Inspector stays at top margin 8 (buttons fall inside the card)
+        QCOMPARE(inspector->property("y").toReal(), 8.0);
         // RightToLeft layout: minimize is on the left, close is on the right
         QVERIFY(minimize->x() < close->x());
 

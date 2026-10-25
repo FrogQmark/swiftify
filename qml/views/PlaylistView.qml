@@ -33,6 +33,9 @@ Item {
         loading: Library.loadingSongs
         allowsPlaylistRemoval: Library.selectedPlaylistEditable
         reorderable: Library.canReorderPlaylist
+        contextType: "playlist"
+        contextName: root.playlist.name
+        contextId: root.playlist.id
         showsEmpty: Library.playlistSongs.count === 0 || Library.displayedPlaylistSongs.count === 0
         emptySymbol: Library.playlistSongs.count === 0 ? "music_note" : "search_off"
         emptyTitle: Library.playlistSongs.count === 0 ? qsTr("No Songs") : qsTr("No Results for “%1”").arg(Library.playlistFilterQuery.trim())
@@ -66,7 +69,10 @@ Item {
                     burst: "play"
                     text: qsTr("Play")
                     enabled: Library.displayedPlaylistSongs.count > 0
-                    onClicked: Player.playInOrder(Library.displayedPlaylistSongs)
+                    onClicked: {
+                        Player.setContext("playlist", root.playlist.name, root.playlist.id)
+                        Player.playInOrder(Library.displayedPlaylistSongs)
+                    }
                 },
                 // play's twin in the primary's softer tone
                 TextButton {
@@ -85,7 +91,10 @@ Item {
                     colRipple: shuffleButton.scheme.primaryContainerActive
                     labelColor: shuffleButton.scheme.onPrimaryContainer
                     enabled: Library.displayedPlaylistSongs.count > 0
-                    onClicked: Player.shufflePlay(Library.displayedPlaylistSongs)
+                    onClicked: {
+                        Player.setContext("playlist", root.playlist.name, root.playlist.id)
+                        Player.shufflePlay(Library.displayedPlaylistSongs)
+                    }
                 },
                 // a playlist made here takes tracks from anywhere: copies,
                 // so the originals can move or go

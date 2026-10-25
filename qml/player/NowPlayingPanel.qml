@@ -17,6 +17,101 @@ Item {
 
     readonly property bool lyricsMaximized: Settings.nowPlayingLyricsMaximized
 
+    readonly property string kickerText: {
+        if (!Player.hasSong) {
+            return ""
+        }
+        switch (Player.contextType) {
+        case "playlist":
+            return qsTr("Playing from playlist")
+        case "album":
+            return qsTr("Playing from album")
+        case "artist":
+            return qsTr("Playing from artist")
+        case "search":
+            return qsTr("Playing from search")
+        case "saved":
+            return qsTr("Playing from playlist")
+        case "local":
+            return qsTr("Playing from local files")
+        case "home":
+            return qsTr("Playing from home")
+        case "stats":
+            return qsTr("Playing from stats")
+        default:
+            return Player.currentSong.albumName.length > 0 ? qsTr("Playing from album") : qsTr("Now Playing")
+        }
+    }
+
+    readonly property string contextTitleText: {
+        if (!Player.hasSong) {
+            return qsTr("Now Playing")
+        }
+        if (Player.contextName.length > 0) {
+            return Player.contextName
+        }
+        if (Player.currentSong.albumName.length > 0) {
+            return Player.currentSong.albumName
+        }
+        return qsTr("Now Playing")
+    }
+
+    readonly property bool isContextClickable: {
+        if (!Player.hasSong) {
+            return false
+        }
+        if (Player.contextType === "playlist") {
+            return Player.contextId.length > 0
+        }
+        if (Player.contextType === "album" || Player.contextType === "artist") {
+            return !Player.currentSong.isLocalFile
+        }
+        if (Player.contextType === "search" || Player.contextType === "saved" || Player.contextType === "local" || Player.contextType === "home" || Player.contextType === "stats") {
+            return true
+        }
+        return !Player.currentSong.isLocalFile && Player.currentSong.albumName.length > 0
+    }
+
+    function navigateToContext() {
+        switch (Player.contextType) {
+        case "playlist":
+            if (Player.contextId.length > 0) {
+                Library.selectPlaylistById(Player.contextId)
+            }
+            break
+        case "album":
+            if (Player.hasSong && !Player.currentSong.isLocalFile) {
+                Library.goToAlbum(Player.currentSong)
+            }
+            break
+        case "artist":
+            if (Player.hasSong && !Player.currentSong.isLocalFile) {
+                Library.goToArtist(Player.currentSong)
+            }
+            break
+        case "search":
+            Library.showSearch()
+            break
+        case "saved":
+            Library.showSavedSongs()
+            break
+        case "local":
+            Library.showLocalTracks()
+            break
+        case "home":
+            Library.showHome()
+            break
+        case "stats":
+            Library.showStats()
+            break
+        default:
+            if (Player.hasSong && !Player.currentSong.isLocalFile) {
+                Library.goToAlbum(Player.currentSong)
+            }
+            break
+        }
+    }
+
     clip: true
 
     function shade(index: int): color {
@@ -71,14 +166,44 @@ Item {
         color: Qt.alpha(Appearance.colors.layer1, 0.35)
     }
 
-    StyledText {
+    Column {
         id: header
         x: 18
         y: 16
-        text: "Now Playing"
-        font.pixelSize: Appearance.fontSize.normal
-        font.weight: Font.DemiBold
-        color: root.scheme.onSurfaceVariant
+        width: parent.width - 36 - (Settings.windowControlsOnRight ? 96 : 0)
+        spacing: 2
+
+        StyledText {
+            width: parent.width
+            text: root.kickerText
+            font.pixelSize: 10
+            font.weight: Font.DemiBold
+            font.capitalization: Font.AllUppercase
+            color: root.scheme.onSurfaceVariant
+            elide: Text.ElideRight
+            visible: text.length > 0
+        }
+
+        StyledText {
+            id: contextTitle
+            width: parent.width
+            text: root.contextTitleText
+            font.pixelSize: Appearance.fontSize.normal
+            font.weight: Font.DemiBold
+            color: root.scheme.onSurface
+            elide: Text.ElideRight
+            font.underline: headerHover.hovered && root.isContextClickable
+
+            HoverHandler {
+                id: headerHover
+                enabled: root.isContextClickable
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            }
+            TapHandler {
+                enabled: root.isContextClickable
+                onTapped: root.navigateToContext()
+            }
+        }
     }
 
     Column {
@@ -86,15 +211,16 @@ Item {
         anchors.top: header.bottom
         anchors.topMargin: 12
         anchors.horizontalCenter: parent.horizontalCenter
-        // the cover gives way to the lyrics in a short window
         width: Math.max(120, Math.min(root.width - 32, root.height * 0.38))
         spacing: 4
-        visible: Player.hasSong && !root.lyricsMaximized
+        visible: Player.hasSong
 
         Item {
             id: cover
             width: parent.width
-            height: width
+            height: root.lyricsMaximized ? 0 : width
+            visible: !root.lyricsMaximized
+            clip: true
 
             SoftShadow {
                 anchors.fill: parent
@@ -138,90 +264,74 @@ Item {
             }
         }
 
-        Item { width: 1; height: 8 }
+        Item {
+            width: 1
+            height: root.lyricsMaximized ? 0 : 8
+            visible: !root.lyricsMaximized
+        }
 
-        TitleText {
+        Row {
             width: parent.width
-            text: Player.currentSong.name
-            elide: Text.ElideRight
-            color: root.scheme.onSurface
-            font.underline: titleHover.hovered && !Player.currentSong.isLocalFile
+            spacing: 8
 
-            HoverHandler {
-                id: titleHover
-                cursorShape: Player.currentSong.isLocalFile ? Qt.ArrowCursor : Qt.PointingHandCursor
+            Column {
+                width: parent.width - maximizeButton.width - parent.spacing
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 2
+
+                TitleText {
+                    width: parent.width
+                    text: Player.currentSong.name
+                    elide: Text.ElideRight
+                    color: root.scheme.onSurface
+                    font.underline: titleHover.hovered && !Player.currentSong.isLocalFile
+
+                    HoverHandler {
+                        id: titleHover
+                        cursorShape: Player.currentSong.isLocalFile ? Qt.ArrowCursor : Qt.PointingHandCursor
+                    }
+                    TapHandler {
+                        onTapped: if (!Player.currentSong.isLocalFile) Library.goToAlbum(Player.currentSong)
+                    }
+                }
+
+                StyledText {
+                    width: parent.width
+                    text: Format.joined([Player.currentSong.artists, Player.currentSong.albumName], " — ")
+                    elide: Text.ElideRight
+                    font.pixelSize: Appearance.fontSize.small
+                    color: root.scheme.onSurfaceVariant
+                    font.underline: artistHover.hovered && !Player.currentSong.isLocalFile
+
+                    HoverHandler {
+                        id: artistHover
+                        cursorShape: Player.currentSong.isLocalFile ? Qt.ArrowCursor : Qt.PointingHandCursor
+                    }
+                    TapHandler {
+                        onTapped: if (!Player.currentSong.isLocalFile) Library.goToArtist(Player.currentSong)
+                    }
+                }
             }
-            TapHandler {
-                onTapped: if (!Player.currentSong.isLocalFile) Library.goToAlbum(Player.currentSong)
+
+            IconButton {
+                id: maximizeButton
+                objectName: "maximizeLyricsButton"
+                anchors.verticalCenter: parent.verticalCenter
+                scheme: root.scheme
+                size: 32
+                iconSize: 20
+                symbol: root.lyricsMaximized ? "close_fullscreen" : "open_in_full"
+                tooltip: root.lyricsMaximized ? qsTr("Restore") : qsTr("Maximize")
+                onClicked: Settings.nowPlayingLyricsMaximized = !Settings.nowPlayingLyricsMaximized
             }
-        }
-
-        StyledText {
-            width: parent.width
-            text: Player.currentSong.artists
-            elide: Text.ElideRight
-            font.pixelSize: Appearance.fontSize.small
-            color: root.scheme.onSurfaceVariant
-            font.underline: artistHover.hovered && !Player.currentSong.isLocalFile
-
-            HoverHandler {
-                id: artistHover
-                cursorShape: Player.currentSong.isLocalFile ? Qt.ArrowCursor : Qt.PointingHandCursor
-            }
-            TapHandler {
-                onTapped: if (!Player.currentSong.isLocalFile) Library.goToArtist(Player.currentSong)
-            }
-        }
-
-        StyledText {
-            width: parent.width
-            visible: text.length > 0
-            topPadding: 2
-            text: Player.currentSong.albumName
-            elide: Text.ElideRight
-            font.pixelSize: Appearance.fontSize.smaller
-            color: Qt.alpha(root.scheme.onSurfaceVariant, 0.75)
-        }
-    }
-
-    Item {
-        id: lyricsHeader
-        anchors.top: root.lyricsMaximized ? header.bottom : info.bottom
-        anchors.topMargin: root.lyricsMaximized ? 8 : 12
-        anchors.left: parent.left
-        anchors.leftMargin: 18
-        anchors.right: parent.right
-        anchors.rightMargin: 18
-        height: 32
-        visible: Player.hasSong
-
-        StyledText {
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            text: qsTr("Lyrics")
-            font.pixelSize: Appearance.fontSize.normal
-            font.weight: Font.DemiBold
-            color: root.scheme.onSurface
-        }
-
-        IconButton {
-            id: maximizeLyricsButton
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            scheme: root.scheme
-            size: 32
-            iconSize: 20
-            symbol: root.lyricsMaximized ? "close_fullscreen" : "open_in_full"
-            tooltip: root.lyricsMaximized ? qsTr("Restore") : qsTr("Maximize")
-            onClicked: Settings.nowPlayingLyricsMaximized = !Settings.nowPlayingLyricsMaximized
         }
     }
 
     // the lyrics fill what is left under the song
     LyricsPanel {
         id: lyrics
-        anchors.top: lyricsHeader.bottom
-        anchors.topMargin: 4
+        anchors.top: info.bottom
+        anchors.topMargin: 8
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

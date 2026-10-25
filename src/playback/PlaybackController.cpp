@@ -1398,6 +1398,17 @@ void PlaybackController::toggleNowPlayingPanel()
     setShowingNowPlaying(!m_showingNowPlaying);
 }
 
+void PlaybackController::setContext(const QString &type, const QString &name, const QString &id)
+{
+    if (m_contextType == type && m_contextName == name && m_contextId == id) {
+        return;
+    }
+    m_contextType = type;
+    m_contextName = name;
+    m_contextId = id;
+    emit contextChanged();
+}
+
 // --- sleep timer --------------------------------------------------------------------
 
 bool PlaybackController::isVolumeManagedBySleepTimer() const
@@ -1507,6 +1518,10 @@ void PlaybackController::reset()
     m_showingQueue = false;
     m_showingNowPlaying = false;
     emit panelsChanged();
+    m_contextType.clear();
+    m_contextName.clear();
+    m_contextId.clear();
+    emit contextChanged();
     // the new core starts at its own default volume
     try {
         m_core->setVolume(float(m_volume));

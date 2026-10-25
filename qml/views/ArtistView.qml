@@ -58,7 +58,10 @@ Flickable {
                     burst: "play"
                     text: qsTr("Play")
                     enabled: Library.artistTopSongs.count > 0
-                    onClicked: Player.playFromModel(Library.artistTopSongs, 0)
+                    onClicked: {
+                        Player.setContext("artist", root.artist.name, root.artist.id)
+                        Player.playFromModel(Library.artistTopSongs, 0)
+                    }
                 }
             ]
         }
@@ -97,6 +100,9 @@ Flickable {
                 x: root.margin
                 width: root.width - 2 * root.margin
                 songs: Library.artistTopSongs
+                contextType: "artist"
+                contextName: root.artist.name
+                contextId: root.artist.id
             }
         }
 
