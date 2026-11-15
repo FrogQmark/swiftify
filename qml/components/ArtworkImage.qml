@@ -37,6 +37,7 @@ Item {
     /// a cover that arrives fades in over the placeholder; without, it is
     /// simply there, as a cover already decoded should be
     property bool fades: true
+    property bool showPlaceholder: true
     /// with `crossfade`, a new cover sweeps in from the side over this long,
     /// counted from when its source changed
     property int revealDuration: 0
@@ -185,7 +186,7 @@ Item {
             radius: root.effectiveRadius
             borderWidth: root.borderWidth
             borderColor: root.borderColor
-            visible: (!root.ready || frontLayer.opacity < 1) && !backLayer.visible
+            visible: root.showPlaceholder && (!root.ready || frontLayer.opacity < 1) && !backLayer.visible
         }
 
         // the cover last shown, at the size it was shown: what stands in

@@ -54,10 +54,14 @@ Item {
     property bool pendingNextSlide: false
     property bool pendingPrevSlide: false
     property int slideDir: 1
-    property song shownSong
-    property song outgoingSong
-    property song shownNextSong
-    property song outgoingNextSong
+    property int coverSlot: 0
+    property song coverSongA
+    property song coverSongB
+    readonly property song shownSong: coverSlot === 0 ? coverSongA : coverSongB
+    property int nextSlot: 0
+    property song nextSongA
+    property song nextSongB
+    readonly property song shownNextSong: nextSlot === 0 ? nextSongA : nextSongB
     property song shownPrevSong
     property song outgoingPrevSong
     property real coverProgress: 1
@@ -69,45 +73,73 @@ Item {
         return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     }
 
+    function setActiveCoverSong(value: song): void {
+        if (coverSlot === 0) {
+            coverSongA = value
+        } else {
+            coverSongB = value
+        }
+    }
+
+    function setActiveNextSong(value: song): void {
+        if (nextSlot === 0) {
+            nextSongA = value
+        } else {
+            nextSongB = value
+        }
+    }
+
     function snapDisplayedSongs(): void {
         coverSlideAnim.stop()
         nextSlideAnim.stop()
         prevSlideAnim.stop()
         pendingNextSlide = false
         pendingPrevSlide = false
-        shownSong = Player.currentSong
-        shownNextSong = nextSong
+        coverSlot = 0
+        coverSongA = Player.currentSong
+        coverSongB = Player.currentSong
+        nextSlot = 0
+        nextSongA = nextSong
+        nextSongB = nextSong
         shownPrevSong = previousSong
-        outgoingSong = Player.currentSong
-        outgoingNextSong = nextSong
         outgoingPrevSong = previousSong
         coverProgress = 1
         nextProgress = 1
         prevProgress = 1
     }
 
+    function applyNextSongSlide(): void {
+        pendingNextSlide = false
+        const currentShown = shownNextSong
+        if (currentShown.instanceId !== nextSong.instanceId || currentShown.uri !== nextSong.uri) {
+            nextSlot = 1 - nextSlot
+            setActiveNextSong(nextSong)
+            nextProgress = 0
+            nextSlideAnim.restart()
+        } else {
+            nextSlideAnim.stop()
+            nextProgress = 1
+        }
+    }
+
+    function applyPrevSongSlide(): void {
+        pendingPrevSlide = false
+        shownPrevSong = previousSong
+        if (outgoingPrevSong.instanceId !== shownPrevSong.instanceId || outgoingPrevSong.uri !== shownPrevSong.uri) {
+            prevProgress = 0
+            prevSlideAnim.restart()
+        } else {
+            prevSlideAnim.stop()
+            prevProgress = 1
+        }
+    }
+
     function flushPendingSlides(): void {
         if (pendingNextSlide) {
-            pendingNextSlide = false
-            shownNextSong = nextSong
-            if (outgoingNextSong.instanceId !== shownNextSong.instanceId || outgoingNextSong.uri !== shownNextSong.uri) {
-                nextProgress = 0
-                nextSlideAnim.restart()
-            } else {
-                outgoingNextSong = nextSong
-                nextProgress = 1
-            }
+            applyNextSongSlide()
         }
         if (pendingPrevSlide) {
-            pendingPrevSlide = false
-            shownPrevSong = previousSong
-            if (outgoingPrevSong.instanceId !== shownPrevSong.instanceId || outgoingPrevSong.uri !== shownPrevSong.uri) {
-                prevProgress = 0
-                prevSlideAnim.restart()
-            } else {
-                outgoingPrevSong = previousSong
-                prevProgress = 1
-            }
+            applyPrevSongSlide()
         }
     }
 
@@ -118,39 +150,18 @@ Item {
 
     onNextSongChanged: {
         if (pendingNextSlide) {
-            pendingNextSlide = false
-            shownNextSong = nextSong
-            if (outgoingNextSong.instanceId !== shownNextSong.instanceId || outgoingNextSong.uri !== shownNextSong.uri) {
-                nextProgress = 0
-                nextSlideAnim.restart()
-            } else {
-                nextSlideAnim.stop()
-                nextProgress = 1
-            }
+            applyNextSongSlide()
             return
         }
         if (!Player.hasSong || shownSong.instanceId !== Player.currentSong.instanceId) {
             return
         }
-        if (nextSlideAnim.running) {
-            shownNextSong = nextSong
-        } else {
-            shownNextSong = nextSong
-            outgoingNextSong = nextSong
-        }
+        setActiveNextSong(nextSong)
     }
 
     onPreviousSongChanged: {
         if (pendingPrevSlide) {
-            pendingPrevSlide = false
-            shownPrevSong = previousSong
-            if (outgoingPrevSong.instanceId !== shownPrevSong.instanceId || outgoingPrevSong.uri !== shownPrevSong.uri) {
-                prevProgress = 0
-                prevSlideAnim.restart()
-            } else {
-                prevSlideAnim.stop()
-                prevProgress = 1
-            }
+            applyPrevSongSlide()
             return
         }
         if (!Player.hasSong || shownSong.instanceId !== Player.currentSong.instanceId) {
@@ -182,9 +193,8 @@ Item {
                            && (incoming.instanceId === prev.instanceId
                                || (prev.uri !== "" && incoming.uri === prev.uri && incoming.uri !== root.shownSong.uri))
             root.slideDir = isPrev ? -1 : 1
-            root.outgoingSong = root.shownSong
-            root.shownSong = incoming
-            root.outgoingNextSong = root.shownNextSong
+            root.coverSlot = 1 - root.coverSlot
+            root.setActiveCoverSong(incoming)
             root.outgoingPrevSong = root.shownPrevSong
             root.pendingNextSlide = true
             root.pendingPrevSlide = true
@@ -209,7 +219,7 @@ Item {
 
     SequentialAnimation {
         id: nextSlideAnim
-        PauseAnimation { duration: Appearance.duration(50) }
+        PauseAnimation { duration: Appearance.duration(35) }
         NumberAnimation {
             target: root
             property: "nextProgress"
@@ -223,7 +233,7 @@ Item {
 
     SequentialAnimation {
         id: prevSlideAnim
-        PauseAnimation { duration: Appearance.duration(100) }
+        PauseAnimation { duration: Appearance.duration(70) }
         NumberAnimation {
             target: root
             property: "prevProgress"
@@ -237,12 +247,19 @@ Item {
 
     component CoverSlide: Item {
         required property song songData
+        required property bool isIncoming
+        z: isIncoming ? 1 : 0
+        visible: isIncoming || (root.coverProgress < 0.999 && songData.valid)
+        x: isIncoming ? root.slideDir * 32 * (1 - root.coverProgress) : -root.slideDir * 32 * root.coverProgress
+        opacity: isIncoming ? root.coverProgress : Math.max(0, 1 - root.coverProgress * 1.25)
 
         ArtworkImage {
             anchors.fill: parent
             radius: Appearance.sizes.artworkRadius
             source: parent.songData.artworkUrl
             crossfade: false
+            fades: false
+            showPlaceholder: false
         }
 
         Rectangle {
@@ -293,7 +310,12 @@ Item {
 
     component MetadataSlide: Column {
         required property song songData
+        required property bool isIncoming
         readonly property real maxLineWidth: Math.max(titleText.implicitWidth, artistText.implicitWidth)
+        z: isIncoming ? 1 : 0
+        visible: isIncoming || (root.coverProgress < 0.999 && songData.valid)
+        x: isIncoming ? root.slideDir * 32 * (1 - root.coverProgress) : -root.slideDir * 32 * root.coverProgress
+        opacity: isIncoming ? root.coverProgress : Math.max(0, 1 - root.coverProgress * 1.25)
         spacing: 2
 
         StyledText {
@@ -318,6 +340,11 @@ Item {
     component NextInfoSlide: Item {
         id: nextSlideRoot
         required property song songData
+        required property bool isIncoming
+        z: isIncoming ? 1 : 0
+        visible: isIncoming || (root.nextProgress < 0.999 && songData.valid)
+        x: isIncoming ? root.slideDir * 24 * (1 - root.nextProgress) : -root.slideDir * 24 * root.nextProgress
+        opacity: isIncoming ? root.nextProgress : Math.max(0, 1 - root.nextProgress * 1.25)
 
         ArtworkImage {
             id: nextArt
@@ -328,6 +355,8 @@ Item {
             radius: Appearance.sizes.smallArtworkRadius
             source: nextSlideRoot.songData.artworkUrl
             crossfade: false
+            fades: false
+            showPlaceholder: false
         }
 
         Column {
@@ -379,7 +408,7 @@ Item {
 
     Behavior on compactProgress {
         enabled: !Appearance.performanceMode
-        ElementMoveFast {}
+        NumberAnimation { duration: Appearance.motion(150); easing.type: Easing.OutCubic }
     }
 
     T.AbstractButton {
@@ -454,18 +483,15 @@ Item {
                 CoverSlide {
                     width: parent.width
                     height: parent.height
-                    songData: root.outgoingSong
-                    visible: root.coverProgress < 0.999 && root.outgoingSong.valid
-                    x: -root.slideDir * 32 * root.coverProgress
-                    opacity: Math.max(0, 1 - root.coverProgress * 1.25)
+                    songData: root.coverSongA
+                    isIncoming: root.coverSlot === 0
                 }
 
                 CoverSlide {
                     width: parent.width
                     height: parent.height
-                    songData: root.shownSong
-                    x: root.slideDir * 32 * (1 - root.coverProgress)
-                    opacity: root.coverProgress
+                    songData: root.coverSongB
+                    isIncoming: root.coverSlot === 1
                 }
             }
         }
@@ -549,6 +575,7 @@ Item {
 
             Item {
                 id: metadataColumn
+                readonly property MetadataSlide activeMeta: root.coverSlot === 0 ? metaSlotA : metaSlotB
                 readonly property real normalY: overlayBox.height - overlayBox.bleed - 12 - height
                 readonly property real compactY: artwork.y - overlayBox.y + (artwork.height - height) / 2
                 anchors.left: parent.left
@@ -556,31 +583,29 @@ Item {
                 anchors.right: overlayButtons.left
                 anchors.rightMargin: 8
                 y: Math.round(normalY + (compactY - normalY) * root.compactBlend)
-                height: incomingMetadata.implicitHeight
-                implicitHeight: incomingMetadata.implicitHeight
+                height: activeMeta.implicitHeight
+                implicitHeight: activeMeta.implicitHeight
                 clip: true
 
                 MetadataSlide {
+                    id: metaSlotA
                     width: parent.width
-                    songData: root.outgoingSong
-                    visible: root.coverProgress < 0.999 && root.outgoingSong.valid
-                    x: -root.slideDir * 32 * root.coverProgress
-                    opacity: Math.max(0, 1 - root.coverProgress * 1.25)
+                    songData: root.coverSongA
+                    isIncoming: root.coverSlot === 0
                 }
 
                 MetadataSlide {
-                    id: incomingMetadata
+                    id: metaSlotB
                     width: parent.width
-                    songData: root.shownSong
-                    x: root.slideDir * 32 * (1 - root.coverProgress)
-                    opacity: root.coverProgress
+                    songData: root.coverSongB
+                    isIncoming: root.coverSlot === 1
                 }
             }
 
             Item {
                 x: metadataColumn.x
                 y: metadataColumn.y
-                width: Math.min(metadataColumn.width, incomingMetadata.maxLineWidth)
+                width: Math.min(metadataColumn.width, metadataColumn.activeMeta.maxLineWidth)
                 height: metadataColumn.height
 
                 HoverHandler {
@@ -998,18 +1023,15 @@ Item {
                 NextInfoSlide {
                     width: parent.width
                     height: parent.height
-                    songData: root.outgoingNextSong
-                    visible: root.nextProgress < 0.999 && root.outgoingNextSong.valid
-                    x: -root.slideDir * 24 * root.nextProgress
-                    opacity: Math.max(0, 1 - root.nextProgress * 1.25)
+                    songData: root.nextSongA
+                    isIncoming: root.nextSlot === 0
                 }
 
                 NextInfoSlide {
                     width: parent.width
                     height: parent.height
-                    songData: root.shownNextSong
-                    x: root.slideDir * 24 * (1 - root.nextProgress)
-                    opacity: root.nextProgress
+                    songData: root.nextSongB
+                    isIncoming: root.nextSlot === 1
                 }
             }
 
