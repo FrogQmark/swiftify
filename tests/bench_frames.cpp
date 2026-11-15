@@ -243,7 +243,7 @@ Item {
         radius: Appearance.rounding.large
         color: Appearance.colors.layer1
 
-        LyricsPanel {
+        NowPlayingPanel {
             anchors.fill: parent
             visible: root.lyrics
         }

@@ -47,7 +47,7 @@ ApplicationWindow {
 
     function closeCrowdedPanels() {
         if (!rightPanelFits) {
-            Player.showingLyrics = false
+            Player.showingNowPlaying = false
             Player.showingQueue = false
         }
     }
@@ -371,7 +371,7 @@ ApplicationWindow {
         Item {
             id: inspector
             objectName: "mainInspector"
-            readonly property bool shown: (Player.showingLyrics || Player.showingQueue) && !UiState.immersiveOpen
+            readonly property bool shown: (Player.showingNowPlaying || Player.showingQueue) && !UiState.immersiveOpen
                                           && !UiState.needsSetup && window.rightPanelFits
             anchors.right: parent.right
             anchors.rightMargin: shown ? 8 : 0
@@ -397,10 +397,10 @@ ApplicationWindow {
                 radius: Appearance.rounding.large
                 color: Appearance.colors.layer1
 
-                LyricsPanel {
-                    objectName: "mainLyricsPanel"
+                NowPlayingPanel {
+                    objectName: "mainNowPlayingPanel"
                     anchors.fill: parent
-                    Reveal.shown: Player.showingLyrics
+                    Reveal.shown: Player.showingNowPlaying
                     suspended: UiState.immersiveOpen
                 }
                 QueuePanel {

@@ -446,12 +446,12 @@ Item {
         IconButton {
             anchors.verticalCenter: parent.verticalCenter
             scheme: root.scheme
-            symbol: "lyrics"
+            symbol: "play_circle"
             size: root.buttonSize
             iconSize: root.tiny ? 18 : 20
-            toggled: Player.showingLyrics
-            tooltip: qsTr("Lyrics")
-            onClicked: Player.toggleLyricsPanel()
+            toggled: Player.showingNowPlaying
+            tooltip: qsTr("Now Playing")
+            onClicked: Player.toggleNowPlayingPanel()
         }
         IconButton {
             anchors.verticalCenter: parent.verticalCenter

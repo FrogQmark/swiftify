@@ -3298,12 +3298,12 @@ private slots:
         window->setWidth(1000);
         Rig::settle();
         QVERIFY(window->property("rightPanelFits").toBool());
-        rig.player.setShowingLyrics(true);
-        QVERIFY(rig.player.isShowingLyrics());
+        rig.player.setShowingNowPlaying(true);
+        QVERIFY(rig.player.isShowingNowPlaying());
         // 980 - 232 sidebar - 320 inspector - 32 gutters = 396 points.
         window->setWidth(980);
         Rig::settle();
-        QVERIFY(!rig.player.isShowingLyrics());
+        QVERIFY(!rig.player.isShowingNowPlaying());
         QVERIFY(!rig.player.isShowingQueue());
         window->setWidth(526);
         rig.player.setShowingQueue(true);
@@ -3311,7 +3311,7 @@ private slots:
         QVERIFY(!rig.player.isShowingQueue());
         window->setWidth(1000);
         Rig::settle();
-        QVERIFY(!rig.player.isShowingLyrics());
+        QVERIFY(!rig.player.isShowingNowPlaying());
         QVERIFY(!rig.player.isShowingQueue());
     }
 
@@ -3701,7 +3701,7 @@ private slots:
     {
         QTest::addColumn<QString>("type");
         for (const char *type : {"SoundPanel", "SleepTimerPanel", "ImmersiveQueue", "ImmersiveLyrics", "SegmentedControl",
-                                 "StyledSwitch", "RollingText", "PlayerBar", "LyricsPanel", "QueuePanel", "Sidebar",
+                                 "StyledSwitch", "RollingText", "PlayerBar", "NowPlayingPanel", "QueuePanel", "Sidebar",
                                  "PageHost", "HomeView", "SearchView", "ArtistView", "AlbumView", "PlaylistView", "PlaylistsView", "SavedSongsView", "LocalFilesView", "LocalTracksView", "StatsView", "StartupView",
                                  "SetupView", "CompactMeter", "MaterialShape", "ShapeIcon", "SquiggleRing", "WavyLine",
                                  "LoadingSpinner", "ShapeButton", "WavyPill", "ToolbarButton", "PlayButton", "ScrollingText"}) {

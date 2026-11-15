@@ -134,12 +134,12 @@ Platform.MenuBar {
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
-            text: qsTr("Lyrics")
+            text: qsTr("Now Playing")
             shortcut: "Ctrl+Alt+L"
             checkable: true
-            checked: Player.showingLyrics
+            checked: Player.showingNowPlaying
             enabled: Player.hasSong
-            onTriggered: Player.toggleLyricsPanel()
+            onTriggered: Player.toggleNowPlayingPanel()
         }
         Platform.MenuItem {
             text: qsTr("Playing Next")

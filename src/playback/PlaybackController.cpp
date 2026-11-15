@@ -1384,12 +1384,12 @@ void PlaybackController::seekToLyricLine(int index)
     seek(int(m_lyrics->lines.at(index).startTimeMs));
 }
 
-void PlaybackController::setShowingLyrics(bool showing)
+void PlaybackController::setShowingNowPlaying(bool showing)
 {
-    if (m_showingLyrics == showing) {
+    if (m_showingNowPlaying == showing) {
         return;
     }
-    m_showingLyrics = showing;
+    m_showingNowPlaying = showing;
     if (showing) {
         m_showingQueue = false;
     }
@@ -1403,14 +1403,14 @@ void PlaybackController::setShowingQueue(bool showing)
     }
     m_showingQueue = showing;
     if (showing) {
-        m_showingLyrics = false;
+        m_showingNowPlaying = false;
     }
     emit panelsChanged();
 }
 
-void PlaybackController::toggleLyricsPanel()
+void PlaybackController::toggleNowPlayingPanel()
 {
-    setShowingLyrics(!m_showingLyrics);
+    setShowingNowPlaying(!m_showingNowPlaying);
 }
 
 void PlaybackController::toggleQueuePanel()
@@ -1523,7 +1523,7 @@ void PlaybackController::reset()
         emit repeatModeChanged();
     }
     clearLyrics();
-    m_showingLyrics = true;
+    m_showingNowPlaying = true;
     m_showingQueue = false;
     emit panelsChanged();
     // the new core starts at its own default volume

@@ -177,9 +177,9 @@ private slots:
         window->setWidth(windowWidth);
         auto *inspector = window->findChild<QQuickItem *>(QStringLiteral("mainInspector"));
         auto *toolbar = window->findChild<QQuickItem *>(QStringLiteral("mainTopBar"));
-        auto *lyrics = window->findChild<QQuickItem *>(QStringLiteral("mainLyricsPanel"));
+        auto *nowPlaying = window->findChild<QQuickItem *>(QStringLiteral("mainNowPlayingPanel"));
         auto *sheet = window->findChild<QQuickItem *>(QStringLiteral("mainSheet"));
-        QVERIFY(inspector && toolbar && lyrics && sheet);
+        QVERIFY(inspector && toolbar && nowPlaying && sheet);
         inspector->setWidth(panelWidth);
         ViewRig::settle();
         QCOMPARE(sheet->y(), 8.0);
@@ -187,7 +187,7 @@ private slots:
         QCOMPARE(sheet->x() + sheet->width(), inspector->x() - 8);
         QCOMPARE(sheet->y() + sheet->height(), window->height() - 8);
         QCOMPARE(toolbar->width(), sheet->width());
-        QCOMPARE(lyrics->y(), 0.0);
+        QCOMPARE(nowPlaying->y(), 0.0);
         const auto immersive = rig.show(QStringLiteral("ImmersivePlayer"));
         QVERIFY(immersive);
         immersive->setWidth(windowWidth);
