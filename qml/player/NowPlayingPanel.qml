@@ -53,6 +53,11 @@ Item {
             id: artworkContainer
             anchors.fill: parent
 
+            Rectangle {
+                anchors.fill: parent
+                color: root.scheme.layer1
+            }
+
             ArtworkImage {
                 id: artwork
                 x: 18
@@ -67,19 +72,20 @@ Item {
 
         Item {
             id: overlayBox
-            readonly property real bleed: 18
-            readonly property real blurReach: Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 32
+            readonly property real bleed: 36
+            readonly property real blurReach: Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 40
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: Math.min(artworkStage.height, blurReach + bleed)
+            visible: artwork.width > 0
 
             ShaderEffectSource {
                 id: stageCapture
                 anchors.fill: parent
                 sourceItem: artworkContainer
                 sourceRect: Qt.rect(0, overlayBox.y, artworkContainer.width, overlayBox.height)
-                live: root.visible && Player.hasSong
+                live: root.visible && Player.hasSong && overlayBox.width > 0
                 hideSource: false
                 visible: false
                 smooth: true
@@ -91,9 +97,12 @@ Item {
                 property variant source: stageCapture
                 property size itemSize: Qt.size(width, height)
                 property vector2d direction: Qt.vector2d(1, 0)
-                property real maxSigma: Appearance.performanceMode ? 0 : 14
+                property real maxSigma: Appearance.performanceMode ? 0 : 16
                 property real maxTint: 0
                 property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
+                property real sideMargin: 18
+                property real bleed: overlayBox.bleed
+                property real cornerRadius: Appearance.sizes.artworkRadius
                 fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
             }
 
@@ -111,9 +120,12 @@ Item {
                 property variant source: acrossTexture
                 property size itemSize: Qt.size(width, height)
                 property vector2d direction: Qt.vector2d(0, 1)
-                property real maxSigma: Appearance.performanceMode ? 0 : 14
-                property real maxTint: Appearance.performanceMode ? 0.72 : 0.56
+                property real maxSigma: Appearance.performanceMode ? 0 : 16
+                property real maxTint: Appearance.performanceMode ? 0.72 : 0.58
                 property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
+                property real sideMargin: 18
+                property real bleed: overlayBox.bleed
+                property real cornerRadius: Appearance.sizes.artworkRadius
                 fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
             }
 
@@ -179,7 +191,7 @@ Item {
     Item {
         id: lyricsArea
         anchors.top: Player.hasSong ? artworkStage.top : header.bottom
-        anchors.topMargin: Player.hasSong ? artwork.height + 12 : 12
+        anchors.topMargin: Player.hasSong ? artwork.height + 10 : 12
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

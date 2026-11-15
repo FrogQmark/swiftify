@@ -29,46 +29,53 @@ layout(std140, binding = 0) uniform buf {
     float maxSigma;
     float maxTint;
     float blurEndY;
+    float sideMargin;
+    float bleed;
+    float cornerRadius;
 };
 
 layout(binding = 1) uniform sampler2D source;
 
 const int REACH = 20;
 
-vec4 tap(vec2 uv)
-{
-    vec2 inside = step(vec2(0.0), uv) * step(uv, vec2(1.0));
-    return texture(source, clamp(uv, vec2(0.0), vec2(1.0))) * (inside.x * inside.y);
-}
-
 void main()
 {
     float t = clamp(qt_TexCoord0.y / max(blurEndY, 0.001), 0.0, 1.0);
-    float strength = sqrt(smoothstep(0.0, 1.0, t));
-    float sigma = maxSigma * strength;
+    float s = smoothstep(0.0, 1.0, t);
+    float blurStrength = pow(s, 0.75);
+    float sigma = maxSigma * blurStrength;
 
     vec4 color;
-    if (sigma < 0.2) {
-        color = tap(qt_TexCoord0);
+    if (sigma <= 0.05) {
+        color = texture(source, clamp(qt_TexCoord0, vec2(0.001), vec2(0.999)));
     } else {
         vec2 texel = direction / max(itemSize, vec2(1.0));
-        float stepPx = max(1.0, sigma * 2.5 / float(REACH));
+        float stepPx = max(0.35, sigma * 2.5 / float(REACH));
         float spread = -0.5 / (sigma * sigma);
 
-        vec4 total = tap(qt_TexCoord0);
+        vec4 total = texture(source, clamp(qt_TexCoord0, vec2(0.001), vec2(0.999)));
         float weights = 1.0;
         for (int i = 1; i <= REACH; i++) {
             float d = float(i) * stepPx;
             float w = exp(d * d * spread);
             vec2 offset = texel * d;
-            total += w * (tap(qt_TexCoord0 + offset) + tap(qt_TexCoord0 - offset));
+            vec2 uvPlus = clamp(qt_TexCoord0 + offset, vec2(0.001), vec2(0.999));
+            vec2 uvMinus = clamp(qt_TexCoord0 - offset, vec2(0.001), vec2(0.999));
+            total += w * (texture(source, uvPlus) + texture(source, uvMinus));
             weights += 2.0 * w;
         }
         color = total / weights;
     }
 
     if (maxTint > 0.0) {
-        color.rgb *= 1.0 - maxTint * strength;
+        vec2 p = qt_TexCoord0 * itemSize;
+        float dx = abs(p.x - itemSize.x * 0.5) - (itemSize.x * 0.5 - sideMargin - cornerRadius);
+        float dy = p.y - (itemSize.y - bleed - cornerRadius);
+        vec2 q = vec2(max(dx, 0.0), max(dy, 0.0));
+        float sdCover = length(q) + min(max(dx, dy), 0.0) - cornerRadius;
+        float tintMask = 1.0 - smoothstep(-8.0, 16.0, sdCover);
+        float tintStrength = pow(s, 0.85);
+        color.rgb *= 1.0 - maxTint * tintStrength * tintMask;
     }
 
     fragColor = color * qt_Opacity;
