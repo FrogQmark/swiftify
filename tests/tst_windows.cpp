@@ -308,6 +308,7 @@ private slots:
         HWND handle = reinterpret_cast<HWND>(window->winId());
         QTRY_VERIFY(GetWindowLongPtrW(handle, GWL_STYLE) & WS_THICKFRAME);
         QVERIFY(GetWindowLongPtrW(handle, GWL_STYLE) & WS_CAPTION);
+        QVERIFY(!(GetWindowLongPtrW(handle, GWL_STYLE) & WS_POPUP));
         auto *minimize = window->findChild<QQuickItem *>(QStringLiteral("minimizeWindowButton"));
         auto *maximize = window->findChild<QQuickItem *>(QStringLiteral("maximizeWindowButton"));
         auto *close = window->findChild<QQuickItem *>(QStringLiteral("closeWindowButton"));

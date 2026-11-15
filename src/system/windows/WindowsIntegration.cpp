@@ -410,12 +410,14 @@ void WindowsIntegration::styleWindow()
     const bool customFrame = m_window->flags().testFlag(Qt::FramelessWindowHint) && m_window->visibility() != QWindow::FullScreen;
     if (customFrame) {
         const LONG_PTR current = GetWindowLongPtrW(handle, GWL_STYLE);
-        const LONG_PTR desired = current | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
+        const LONG_PTR desired = (current | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU) & ~WS_POPUP;
         if (current != desired) {
             SetWindowLongPtrW(handle, GWL_STYLE, desired);
             SetWindowPos(handle, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
     }
+    const BOOL transitionsDisabled = FALSE;
+    DwmSetWindowAttribute(handle, DWMWA_TRANSITIONS_FORCEDISABLED, &transitionsDisabled, sizeof(transitionsDisabled));
     const MARGINS margins = customFrame ? MARGINS{0, 0, 0, 1} : MARGINS{0, 0, 0, 0};
     DwmExtendFrameIntoClientArea(handle, &margins);
     const auto *quick = qobject_cast<QQuickWindow *>(m_window.data());
