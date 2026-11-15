@@ -51,6 +51,8 @@ Item {
     readonly property bool coverHovered: coverHover.hovered && !textHover.hovered && !moreButton.hovered
 
     property bool hadSong: false
+    property bool pendingNextSlide: false
+    property bool pendingPrevSlide: false
     property int slideDir: 1
     property song shownSong
     property song outgoingSong
@@ -71,6 +73,8 @@ Item {
         coverSlideAnim.stop()
         nextSlideAnim.stop()
         prevSlideAnim.stop()
+        pendingNextSlide = false
+        pendingPrevSlide = false
         shownSong = Player.currentSong
         shownNextSong = nextSong
         shownPrevSong = previousSong
@@ -82,12 +86,49 @@ Item {
         prevProgress = 1
     }
 
+    function flushPendingSlides(): void {
+        if (pendingNextSlide) {
+            pendingNextSlide = false
+            shownNextSong = nextSong
+            if (outgoingNextSong.instanceId !== shownNextSong.instanceId || outgoingNextSong.uri !== shownNextSong.uri) {
+                nextProgress = 0
+                nextSlideAnim.restart()
+            } else {
+                outgoingNextSong = nextSong
+                nextProgress = 1
+            }
+        }
+        if (pendingPrevSlide) {
+            pendingPrevSlide = false
+            shownPrevSong = previousSong
+            if (outgoingPrevSong.instanceId !== shownPrevSong.instanceId || outgoingPrevSong.uri !== shownPrevSong.uri) {
+                prevProgress = 0
+                prevSlideAnim.restart()
+            } else {
+                outgoingPrevSong = previousSong
+                prevProgress = 1
+            }
+        }
+    }
+
     Component.onCompleted: {
         hadSong = Player.hasSong
         snapDisplayedSongs()
     }
 
     onNextSongChanged: {
+        if (pendingNextSlide) {
+            pendingNextSlide = false
+            shownNextSong = nextSong
+            if (outgoingNextSong.instanceId !== shownNextSong.instanceId || outgoingNextSong.uri !== shownNextSong.uri) {
+                nextProgress = 0
+                nextSlideAnim.restart()
+            } else {
+                nextSlideAnim.stop()
+                nextProgress = 1
+            }
+            return
+        }
         if (!Player.hasSong || shownSong.instanceId !== Player.currentSong.instanceId) {
             return
         }
@@ -100,6 +141,18 @@ Item {
     }
 
     onPreviousSongChanged: {
+        if (pendingPrevSlide) {
+            pendingPrevSlide = false
+            shownPrevSong = previousSong
+            if (outgoingPrevSong.instanceId !== shownPrevSong.instanceId || outgoingPrevSong.uri !== shownPrevSong.uri) {
+                prevProgress = 0
+                prevSlideAnim.restart()
+            } else {
+                prevSlideAnim.stop()
+                prevProgress = 1
+            }
+            return
+        }
         if (!Player.hasSong || shownSong.instanceId !== Player.currentSong.instanceId) {
             return
         }
@@ -116,7 +169,7 @@ Item {
         function onCurrentSongChanged(): void {
             const nowHasSong = Player.hasSong
             const incoming = Player.currentSong
-            if (!nowHasSong || !root.hadSong || root.shownSong.instanceId === ""
+            if (!nowHasSong || !root.hadSong || !root.shownSong.valid
                     || incoming.instanceId === root.shownSong.instanceId
                     || Appearance.performanceMode || Appearance.reduceMotion) {
                 root.hadSong = nowHasSong
@@ -125,36 +178,21 @@ Item {
             }
 
             const prev = root.shownPrevSong
-            const isPrev = prev.instanceId !== ""
+            const isPrev = prev.valid
                            && (incoming.instanceId === prev.instanceId
                                || (prev.uri !== "" && incoming.uri === prev.uri && incoming.uri !== root.shownSong.uri))
             root.slideDir = isPrev ? -1 : 1
             root.outgoingSong = root.shownSong
             root.shownSong = incoming
             root.outgoingNextSong = root.shownNextSong
-            root.shownNextSong = root.nextSong
             root.outgoingPrevSong = root.shownPrevSong
-            root.shownPrevSong = root.previousSong
+            root.pendingNextSlide = true
+            root.pendingPrevSlide = true
             root.hadSong = true
 
             root.coverProgress = 0
             coverSlideAnim.restart()
-
-            if (root.outgoingNextSong.instanceId !== root.shownNextSong.instanceId) {
-                root.nextProgress = 0
-                nextSlideAnim.restart()
-            } else {
-                nextSlideAnim.stop()
-                root.nextProgress = 1
-            }
-
-            if (root.outgoingPrevSong.instanceId !== root.shownPrevSong.instanceId) {
-                root.prevProgress = 0
-                prevSlideAnim.restart()
-            } else {
-                prevSlideAnim.stop()
-                root.prevProgress = 1
-            }
+            Qt.callLater(root.flushPendingSlides)
         }
     }
 
@@ -164,9 +202,9 @@ Item {
         property: "coverProgress"
         from: 0
         to: 1
-        duration: Appearance.motion(450)
+        duration: Appearance.motion(340)
         easing.type: Easing.BezierSpline
-        easing.bezierCurve: Appearance.curves.expressiveDefaultSpatial
+        easing.bezierCurve: Appearance.curves.expressiveEffects
     }
 
     SequentialAnimation {
@@ -177,9 +215,9 @@ Item {
             property: "nextProgress"
             from: 0
             to: 1
-            duration: Appearance.motion(450)
+            duration: Appearance.motion(340)
             easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.curves.expressiveDefaultSpatial
+            easing.bezierCurve: Appearance.curves.expressiveEffects
         }
     }
 
@@ -191,9 +229,9 @@ Item {
             property: "prevProgress"
             from: 0
             to: 1
-            duration: Appearance.motion(450)
+            duration: Appearance.motion(340)
             easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.curves.expressiveDefaultSpatial
+            easing.bezierCurve: Appearance.curves.expressiveEffects
         }
     }
 
@@ -417,17 +455,17 @@ Item {
                     width: parent.width
                     height: parent.height
                     songData: root.outgoingSong
-                    visible: root.coverProgress < 0.999 && root.outgoingSong.instanceId !== ""
-                    x: -root.slideDir * parent.width * root.coverProgress
-                    opacity: Math.max(0, 1 - root.coverProgress * 1.4)
+                    visible: root.coverProgress < 0.999 && root.outgoingSong.valid
+                    x: -root.slideDir * 32 * root.coverProgress
+                    opacity: Math.max(0, 1 - root.coverProgress * 1.25)
                 }
 
                 CoverSlide {
                     width: parent.width
                     height: parent.height
                     songData: root.shownSong
-                    x: root.slideDir * parent.width * (1 - root.coverProgress)
-                    opacity: Math.min(1, root.coverProgress * 2.2)
+                    x: root.slideDir * 32 * (1 - root.coverProgress)
+                    opacity: root.coverProgress
                 }
             }
         }
@@ -525,17 +563,17 @@ Item {
                 MetadataSlide {
                     width: parent.width
                     songData: root.outgoingSong
-                    visible: root.coverProgress < 0.999 && root.outgoingSong.instanceId !== ""
-                    x: -root.slideDir * parent.width * root.coverProgress
-                    opacity: Math.max(0, 1 - root.coverProgress * 1.4)
+                    visible: root.coverProgress < 0.999 && root.outgoingSong.valid
+                    x: -root.slideDir * 32 * root.coverProgress
+                    opacity: Math.max(0, 1 - root.coverProgress * 1.25)
                 }
 
                 MetadataSlide {
                     id: incomingMetadata
                     width: parent.width
                     songData: root.shownSong
-                    x: root.slideDir * parent.width * (1 - root.coverProgress)
-                    opacity: Math.min(1, root.coverProgress * 2.2)
+                    x: root.slideDir * 32 * (1 - root.coverProgress)
+                    opacity: root.coverProgress
                 }
             }
 
@@ -961,17 +999,17 @@ Item {
                     width: parent.width
                     height: parent.height
                     songData: root.outgoingNextSong
-                    visible: root.nextProgress < 0.999 && root.outgoingNextSong.instanceId !== ""
-                    x: -root.slideDir * parent.width * root.nextProgress
-                    opacity: Math.max(0, 1 - root.nextProgress * 1.4)
+                    visible: root.nextProgress < 0.999 && root.outgoingNextSong.valid
+                    x: -root.slideDir * 24 * root.nextProgress
+                    opacity: Math.max(0, 1 - root.nextProgress * 1.25)
                 }
 
                 NextInfoSlide {
                     width: parent.width
                     height: parent.height
                     songData: root.shownNextSong
-                    x: root.slideDir * parent.width * (1 - root.nextProgress)
-                    opacity: Math.min(1, root.nextProgress * 2.2)
+                    x: root.slideDir * 24 * (1 - root.nextProgress)
+                    opacity: root.nextProgress
                 }
             }
 
@@ -1090,17 +1128,17 @@ Item {
                     width: parent.width
                     anchors.verticalCenter: parent.verticalCenter
                     songData: root.outgoingPrevSong
-                    visible: root.prevProgress < 0.999 && root.outgoingPrevSong.instanceId !== ""
-                    x: -root.slideDir * parent.width * root.prevProgress
-                    opacity: Math.max(0, 1 - root.prevProgress * 1.4)
+                    visible: root.prevProgress < 0.999 && root.outgoingPrevSong.valid
+                    x: -root.slideDir * 24 * root.prevProgress
+                    opacity: Math.max(0, 1 - root.prevProgress * 1.25)
                 }
 
                 PrevInfoSlide {
                     width: parent.width
                     anchors.verticalCenter: parent.verticalCenter
                     songData: root.shownPrevSong
-                    x: root.slideDir * parent.width * (1 - root.prevProgress)
-                    opacity: Math.min(1, root.prevProgress * 2.2)
+                    x: root.slideDir * 24 * (1 - root.prevProgress)
+                    opacity: root.prevProgress
                 }
             }
         }
