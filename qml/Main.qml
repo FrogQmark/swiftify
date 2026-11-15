@@ -261,7 +261,7 @@ ApplicationWindow {
                 onActiveChanged: if (active) window.startSystemMove()
             }
             TapHandler {
-                onDoubleTapped: window.visibility === Window.Maximized ? window.showNormal() : window.showMaximized()
+                onDoubleTapped: App.toggleWindowMaximized(window)
             }
         }
 

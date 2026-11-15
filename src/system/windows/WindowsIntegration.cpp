@@ -319,6 +319,28 @@ void WindowsIntegration::setNativeTitleBar(QWindow *window, bool enabled)
     if (active && window->isVisible()) window->requestActivate();
 }
 
+void WindowsIntegration::toggleMaximized(QWindow *window)
+{
+    if (!window) return;
+    if (!window->handle() || QGuiApplication::platformName() != QLatin1StringView("windows")) {
+        if (window->visibility() == QWindow::Maximized) window->showNormal();
+        else window->showMaximized();
+        return;
+    }
+    const HWND handle = reinterpret_cast<HWND>(window->winId());
+    SendMessageW(handle, WM_SYSCOMMAND, IsZoomed(handle) ? SC_RESTORE : SC_MAXIMIZE, 0);
+}
+
+void WindowsIntegration::minimizeWindow(QWindow *window)
+{
+    if (!window) return;
+    if (!window->handle() || QGuiApplication::platformName() != QLatin1StringView("windows")) {
+        window->showMinimized();
+        return;
+    }
+    SendMessageW(reinterpret_cast<HWND>(window->winId()), WM_SYSCOMMAND, SC_MINIMIZE, 0);
+}
+
 WindowsIntegration::WindowsIntegration(PlaybackController *player, Theme *theme, QObject *parent)
     : QObject(parent), m_player(player), m_theme(theme)
 {
