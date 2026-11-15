@@ -28,6 +28,7 @@ layout(std140, binding = 0) uniform buf {
     vec2 direction;
     float maxSigma;
     float blurEndY;
+    float uniformBlur;
 };
 
 layout(binding = 1) uniform sampler2D source;
@@ -37,7 +38,7 @@ const int REACH = 18;
 void main()
 {
     float t = clamp(qt_TexCoord0.y / max(blurEndY, 0.001), 0.0, 1.0);
-    float strength = smoothstep(0.0, 1.0, t);
+    float strength = mix(smoothstep(0.0, 1.0, t), 1.0, uniformBlur);
     float sigma = maxSigma * strength;
 
     vec4 color;

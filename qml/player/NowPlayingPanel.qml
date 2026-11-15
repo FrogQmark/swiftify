@@ -37,12 +37,19 @@ Item {
     readonly property real bottomButtonsHeight: (nextButton.visible ? nextButton.height + 10 : 0)
                                               + (prevButton.visible ? prevButton.height + (nextButton.visible ? 8 : 10) : 0)
                                               + 18
+    readonly property real fullCoverSize: Math.max(0, Math.round(root.width - 36))
+    readonly property real availableCoverHeight: root.height - 36 - 20 - lyricsContainer.minLyricsHeight - bottomButtonsHeight
+    readonly property bool compactCover: Player.hasSong && fullCoverSize > 0 && availableCoverHeight < fullCoverSize * 0.5
+    readonly property real coverHeight: !Player.hasSong ? 0
+                                        : (compactCover ? 96 : Math.round(Math.min(fullCoverSize, Math.max(fullCoverSize * 0.5, availableCoverHeight))))
+    readonly property bool coverHovered: coverHover.hovered && !textHover.hovered && !moreButton.hovered
     clip: true
 
     StyledText {
         id: header
         x: 18
         y: Math.round((36 - implicitHeight) / 2)
+        z: 1
         text: qsTr("Now Playing")
         font.pixelSize: Appearance.fontSize.smallie
         font.weight: Font.DemiBold
@@ -51,11 +58,12 @@ Item {
 
     Item {
         id: artworkStage
+        readonly property real topBleed: root.compactCover ? 10 : 0
         anchors.top: parent.top
-        anchors.topMargin: 36
+        anchors.topMargin: 36 - topBleed
         anchors.left: parent.left
         anchors.right: parent.right
-        height: artwork.height + overlayBox.bleed
+        height: topBleed + root.coverHeight + overlayBox.bleed
         visible: Player.hasSong
 
         Item {
@@ -67,32 +75,57 @@ Item {
                 color: root.scheme.layer1
             }
 
-            ArtworkImage {
+            Item {
                 id: artwork
                 x: 18
-                y: 0
-                width: Math.max(0, Math.round(parent.width - 36))
-                height: width
-                radius: Appearance.sizes.artworkRadius
-                source: Player.currentSong.artworkUrl
-                crossfade: true
-            }
+                y: artworkStage.topBleed
+                width: root.fullCoverSize
+                height: root.coverHeight
+                scale: root.coverHovered ? 1.035 : 1
 
-            Rectangle {
-                anchors.fill: artwork
-                radius: Appearance.sizes.artworkRadius
-                gradient: Gradient {
-                    GradientStop {
-                        position: Math.max(0.1, 1.0 - overlayBox.blurReach / Math.max(1, artwork.height))
-                        color: "transparent"
+                Behavior on scale {
+                    enabled: !Appearance.performanceMode
+                    NumberAnimation {
+                        duration: Appearance.motion(220)
+                        easing.type: Easing.OutBack
                     }
-                    GradientStop {
-                        position: Math.max(0.2, 1.0 - (overlayBox.blurReach * 0.5) / Math.max(1, artwork.height))
-                        color: Qt.rgba(0, 0, 0, 0.28)
+                }
+
+                ArtworkImage {
+                    anchors.fill: parent
+                    radius: Appearance.sizes.artworkRadius
+                    source: Player.currentSong.artworkUrl
+                    crossfade: true
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Appearance.sizes.artworkRadius
+                    visible: !root.compactCover
+                    gradient: Gradient {
+                        GradientStop {
+                            position: Math.max(0.1, 1.0 - overlayBox.blurReach / Math.max(1, artwork.height))
+                            color: "transparent"
+                        }
+                        GradientStop {
+                            position: Math.max(0.2, 1.0 - (overlayBox.blurReach * 0.5) / Math.max(1, artwork.height))
+                            color: Qt.rgba(0, 0, 0, 0.28)
+                        }
+                        GradientStop {
+                            position: 1.0
+                            color: Qt.rgba(0, 0, 0, Appearance.performanceMode ? 0.68 : 0.52)
+                        }
                     }
-                    GradientStop {
-                        position: 1.0
-                        color: Qt.rgba(0, 0, 0, Appearance.performanceMode ? 0.68 : 0.52)
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Appearance.sizes.artworkRadius
+                    visible: root.compactCover
+                    color: Qt.rgba(0, 0, 0, root.coverHovered ? 0.28 : (Appearance.performanceMode ? 0.62 : 0.46))
+
+                    Behavior on color {
+                        ElementMoveFastColor {}
                     }
                 }
             }
@@ -100,13 +133,19 @@ Item {
 
         Item {
             id: overlayBox
-            readonly property real bleed: 24
-            readonly property real blurReach: Math.round(Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 72)
+            readonly property real bleed: root.compactCover ? 16 : 24
+            readonly property real blurReach: Math.round(Math.min(root.coverHeight, Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 72))
+            property real targetSigma: Appearance.performanceMode ? 0 : (root.coverHovered ? 1.2 : 9.5)
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: Math.round(Math.min(artworkStage.height, blurReach + bleed))
+            height: root.compactCover ? artworkStage.height : Math.round(Math.min(artworkStage.height, blurReach + bleed))
             visible: artwork.width > 0
+
+            Behavior on targetSigma {
+                enabled: !Appearance.performanceMode
+                NumberAnimation { duration: Appearance.duration(220); easing.type: Easing.OutCubic }
+            }
 
             ShaderEffectSource {
                 id: stageCapture
@@ -125,8 +164,9 @@ Item {
                 property variant source: stageCapture
                 property size itemSize: Qt.size(width, height)
                 property vector2d direction: Qt.vector2d(1, 0)
-                property real maxSigma: Appearance.performanceMode ? 0 : 9.5
+                property real maxSigma: overlayBox.targetSigma
                 property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
+                property real uniformBlur: root.compactCover ? 1 : 0
                 fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
             }
 
@@ -144,9 +184,27 @@ Item {
                 property variant source: acrossTexture
                 property size itemSize: Qt.size(width, height)
                 property vector2d direction: Qt.vector2d(0, 1)
-                property real maxSigma: Appearance.performanceMode ? 0 : 9.5
+                property real maxSigma: overlayBox.targetSigma
                 property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
+                property real uniformBlur: root.compactCover ? 1 : 0
                 fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
+            }
+
+            MouseArea {
+                x: artwork.x
+                y: artwork.y - overlayBox.y
+                width: artwork.width
+                height: artwork.height
+                onClicked: {
+                    if (Player.hasSong && !textHover.hovered) {
+                        UiState.immersiveOpen = true
+                    }
+                }
+
+                HoverHandler {
+                    id: coverHover
+                    cursorShape: root.coverHovered && Player.hasSong ? Qt.PointingHandCursor : Qt.ArrowCursor
+                }
             }
 
             Column {
@@ -155,11 +213,13 @@ Item {
                 anchors.leftMargin: 32
                 anchors.right: overlayButtons.left
                 anchors.rightMargin: 8
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: overlayBox.bleed + 12
+                y: root.compactCover
+                   ? Math.round(artwork.y - overlayBox.y + (artwork.height - implicitHeight) / 2)
+                   : Math.round(overlayBox.height - overlayBox.bleed - 12 - implicitHeight)
                 spacing: 2
 
                 StyledText {
+                    id: titleText
                     width: parent.width
                     text: Player.currentSong.name
                     elide: Text.ElideRight
@@ -168,11 +228,23 @@ Item {
                     color: "white"
                 }
                 StyledText {
+                    id: artistText
                     width: parent.width
                     text: Player.currentSong.artists
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.fontSize.smallie
                     color: Qt.rgba(1, 1, 1, 0.82)
+                }
+            }
+
+            Item {
+                x: metadataColumn.x
+                y: metadataColumn.y
+                width: Math.min(metadataColumn.width, Math.max(titleText.implicitWidth, artistText.implicitWidth))
+                height: metadataColumn.implicitHeight
+
+                HoverHandler {
+                    id: textHover
                 }
             }
 
@@ -183,6 +255,7 @@ Item {
                 anchors.verticalCenter: metadataColumn.verticalCenter
 
                 IconButton {
+                    id: moreButton
                     scheme: root.scheme
                     symbol: "more_horiz"
                     size: 32
@@ -201,7 +274,7 @@ Item {
         id: lyricsContainer
         readonly property real minLyricsHeight: 280
         anchors.top: Player.hasSong ? artworkStage.top : header.bottom
-        anchors.topMargin: Player.hasSong ? artwork.height + 20 : 12
+        anchors.topMargin: Player.hasSong ? artworkStage.topBleed + artwork.height + 20 : 12
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: 18
