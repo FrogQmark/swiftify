@@ -48,6 +48,10 @@ Item {
     readonly property bool coverHovered: coverHover.hovered && !textHover.hovered && !moreButton.hovered
     clip: true
 
+    function escapeHtml(value: string): string {
+        return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    }
+
     Behavior on maxProgress {
         enabled: !Appearance.performanceMode
         ElementMove {}
@@ -156,6 +160,17 @@ Item {
 
                     Behavior on color {
                         ElementMoveFastColor {}
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Appearance.sizes.artworkRadius
+                    visible: !root.compactCover
+                    color: Qt.rgba(0, 0, 0, root.coverHovered && Player.hasSong ? 0.25 : 0)
+
+                    Behavior on color {
+                        ColorAnimation { duration: Appearance.duration(160) }
                     }
                 }
             }
@@ -298,6 +313,24 @@ Item {
                 }
             }
         }
+
+        MaterialSymbol {
+            x: root.compactCover
+               ? artwork.x + artwork.width - width - 10
+               : Math.round(artwork.x + (artwork.width - width) / 2)
+            y: root.compactCover
+               ? artwork.y + 8
+               : Math.round(artwork.y + (artwork.height - height) / 2)
+            text: "open_in_full"
+            iconSize: root.compactCover ? 18 : 28
+            weight: 600
+            color: "white"
+            opacity: root.coverHovered && Player.hasSong ? 1 : 0
+
+            Behavior on opacity {
+                NumberAnimation { duration: Appearance.duration(160) }
+            }
+        }
     }
 
     Rectangle {
@@ -347,7 +380,20 @@ Item {
                 symbol: root.lyricsMaximized ? "close_fullscreen" : "open_in_full"
                 size: 30
                 iconSize: 16
-                tooltip: root.lyricsMaximized ? qsTr("Minimize lyrics") : qsTr("Maximize lyrics")
+                tooltip: root.lyricsMaximized ? qsTr("Restore lyrics") : qsTr("Expand lyrics")
+                contentItem: Item {
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: maximizeLyricsButton.symbol
+                        iconSize: maximizeLyricsButton.iconSize
+                        color: maximizeLyricsButton.iconColor
+                        rotation: -45
+
+                        Behavior on color {
+                            ElementMoveFastColor {}
+                        }
+                    }
+                }
                 onClicked: {
                     root.lyricsMaximized = !root.lyricsMaximized
                     Qt.callLater(() => list.follow(true))
@@ -791,7 +837,11 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 10
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.previousSong.artists.length > 0 ? root.previousSong.name + " - " + root.previousSong.artists : root.previousSong.name
+                textFormat: Text.StyledText
+                maximumLineCount: 1
+                text: root.previousSong.artists.length > 0
+                      ? "<b>" + root.escapeHtml(root.previousSong.name) + "</b> - " + root.escapeHtml(root.previousSong.artists)
+                      : "<b>" + root.escapeHtml(root.previousSong.name) + "</b>"
                 elide: Text.ElideRight
                 font.pixelSize: Appearance.fontSize.smaller
                 color: prevButton.hovered ? root.scheme.onSurface : root.scheme.onSurfaceVariant
