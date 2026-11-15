@@ -172,7 +172,6 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 26
                 anchors.verticalCenter: metadataColumn.verticalCenter
-                spacing: 2
 
                 IconButton {
                     scheme: root.scheme
@@ -185,178 +184,223 @@ Item {
                     tooltip: qsTr("More options")
                     onClicked: SongMenus.open(Player.currentSong, false)
                 }
-
-                IconButton {
-                    scheme: root.scheme
-                    symbol: "open_in_full"
-                    size: 32
-                    iconSize: 16
-                    iconColor: "white"
-                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.14)
-                    tooltip: qsTr("Maximize lyrics")
-                }
             }
         }
     }
 
-    Item {
-        id: lyricsArea
+    Rectangle {
+        id: lyricsContainer
         anchors.top: Player.hasSong ? artworkStage.top : header.bottom
-        anchors.topMargin: Player.hasSong ? artwork.height + 10 : 12
+        anchors.topMargin: Player.hasSong ? artwork.height + 12 : 12
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        anchors.bottomMargin: 18
+        radius: Appearance.rounding.normal
+        color: root.scheme.layer2
         clip: true
 
-        Column {
-            anchors.centerIn: parent
-            Reveal.shown: Player.loadingLyrics
-            spacing: 12
-            LoadingSpinner { anchors.horizontalCenter: parent.horizontalCenter }
+        Item {
+            id: lyricsHeader
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.topMargin: 10
+            anchors.leftMargin: 16
+            anchors.rightMargin: 10
+            height: maximizeLyricsButton.height
+
             StyledText {
-                text: qsTr("Loading lyrics…")
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("Lyrics")
+                font.pixelSize: Appearance.fontSize.smallie
+                font.weight: Font.DemiBold
                 color: root.scheme.onSurfaceVariant
             }
+
+            IconButton {
+                id: maximizeLyricsButton
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                scheme: root.scheme
+                symbol: "open_in_full"
+                size: 30
+                iconSize: 16
+                tooltip: qsTr("Maximize lyrics")
+            }
         }
 
-        EmptyState {
-            anchors.centerIn: parent
-            width: parent.width - 32
-            Reveal.shown: !Player.loadingLyrics && !Player.hasLyrics
-            symbol: "lyrics"
-            title: qsTr("Lyrics Unavailable")
-            description: Player.lyricsMessage.length > 0 ? qsTranslate("Errors", Player.lyricsMessage) : qsTr("i guess bro")
-        }
-
-        ListView {
-            id: list
-            anchors.fill: parent
-            Reveal.shown: !Player.loadingLyrics && Player.hasLyrics
-            model: Player.lyrics
-            spacing: 22
-            topMargin: 8
-            bottomMargin: 18
-            leftMargin: 18
-            rightMargin: 18
+        Item {
+            id: lyricsArea
+            anchors.top: lyricsHeader.bottom
+            anchors.topMargin: 2
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
             clip: true
-            boundsBehavior: Flickable.DragAndOvershootBounds
-            cacheBuffer: 2000
-            signal stepped(real delta)
 
-            ScrollBar.vertical: StyledScrollBar {}
-
-            function follow(animated: bool) {
-                const index = Player.activeLyricIndex
-                if (index < 0 || root.suspended) {
-                    return
+            Column {
+                anchors.centerIn: parent
+                Reveal.shown: Player.loadingLyrics
+                spacing: 12
+                LoadingSpinner { anchors.horizontalCenter: parent.horizontalCenter }
+                StyledText {
+                    text: qsTr("Loading lyrics…")
+                    color: root.scheme.onSurfaceVariant
                 }
-                const item = list.itemAtIndex(index)
-                if (!item) {
+            }
+
+            EmptyState {
+                anchors.centerIn: parent
+                width: parent.width - 32
+                Reveal.shown: !Player.loadingLyrics && !Player.hasLyrics
+                symbol: "lyrics"
+                title: qsTr("Lyrics Unavailable")
+                description: Player.lyricsMessage.length > 0 ? qsTranslate("Errors", Player.lyricsMessage) : qsTr("i guess bro")
+            }
+
+            ListView {
+                id: list
+                anchors.fill: parent
+                Reveal.shown: !Player.loadingLyrics && Player.hasLyrics
+                model: Player.lyrics
+                spacing: 20
+                topMargin: 18
+                bottomMargin: 22
+                leftMargin: 16
+                rightMargin: 16
+                clip: true
+                boundsBehavior: Flickable.DragAndOvershootBounds
+                cacheBuffer: 2000
+                signal stepped(real delta)
+
+                layer.enabled: width > 0 && height > 0
+                layer.effect: ShaderEffect {
+                    property variant source
+                    property size itemSize: Qt.size(list.width, list.height)
+                    property real edgePx: 34
+                    property real maxSigma: Appearance.performanceMode ? 0 : 2.2
+                    fragmentShader: "qrc:/shaders/lyrics_edge_fade.frag.qsb"
+                }
+
+                ScrollBar.vertical: StyledScrollBar {}
+
+                function follow(animated: bool) {
+                    const index = Player.activeLyricIndex
+                    if (index < 0 || root.suspended) {
+                        return
+                    }
+                    const item = list.itemAtIndex(index)
+                    if (!item) {
+                        scroll.stop()
+                        list.positionViewAtIndex(index, ListView.Center)
+                        return
+                    }
+                    const target = Math.max(list.originY - list.topMargin,
+                                            Math.min(item.y + item.height / 2 - list.height / 2,
+                                                     list.contentHeight + list.originY - list.height + list.bottomMargin))
+                    const delta = target - list.contentY
                     scroll.stop()
-                    list.positionViewAtIndex(index, ListView.Center)
-                    return
+                    if (animated && Appearance.reduceMotion && !Appearance.performanceMode) {
+                        scroll.to = target
+                        scroll.start()
+                        return
+                    }
+                    list.contentY = target
+                    if (animated && !Appearance.reduceMotion) {
+                        list.stepped(delta)
+                    }
                 }
-                const target = Math.max(list.originY - list.topMargin,
-                                        Math.min(item.y + item.height / 2 - list.height / 2,
-                                                 list.contentHeight + list.originY - list.height + list.bottomMargin))
-                const delta = target - list.contentY
-                scroll.stop()
-                if (animated && Appearance.reduceMotion && !Appearance.performanceMode) {
-                    scroll.to = target
-                    scroll.start()
-                    return
+
+                NumberAnimation {
+                    id: scroll
+                    target: list
+                    property: "contentY"
+                    duration: 420
+                    easing.type: Easing.OutCubic
                 }
-                list.contentY = target
-                if (animated && !Appearance.reduceMotion) {
-                    list.stepped(delta)
-                }
-            }
-
-            NumberAnimation {
-                id: scroll
-                target: list
-                property: "contentY"
-                duration: 420
-                easing.type: Easing.OutCubic
-            }
-
-            Connections {
-                target: Player
-                function onActiveLyricIndexChanged() { list.follow(true) }
-            }
-            Connections {
-                target: root
-                function onSuspendedChanged() { if (!root.suspended) list.follow(false) }
-            }
-
-            delegate: Item {
-                id: line
-
-                required property int index
-                required property string words
-                required property int startTimeMs
-                readonly property bool active: !Player.lyricsSynchronized || Player.activeLyricIndex === index
-
-                width: list.width - list.leftMargin - list.rightMargin
-                height: text.implicitHeight
-
-                property real lag: 0
-                transform: Translate { y: line.lag }
 
                 Connections {
-                    target: list
-                    function onStepped(delta: real) {
-                        line.lag += delta
-                        settle.restart()
-                    }
+                    target: Player
+                    function onActiveLyricIndexChanged() { list.follow(true) }
                 }
-                SequentialAnimation {
-                    id: settle
-                    PauseAnimation { duration: Math.min(Math.abs(line.index - Player.activeLyricIndex), 8) * 16 }
-                    NumberAnimation { target: line; property: "lag"; to: 0; duration: 560; easing.type: Easing.OutBack; easing.overshoot: 0.6 }
+                Connections {
+                    target: root
+                    function onSuspendedChanged() { if (!root.suspended) list.follow(false) }
                 }
 
-                StyledText {
-                    id: text
-                    width: parent.width
-                    transformOrigin: Item.TopLeft
-                    text: line.words.length > 0 ? line.words : "♪"
-                    wrapMode: Text.Wrap
-                    font.pixelSize: 22
-                    font.weight: Font.Bold
-                    color: root.scheme.onSurface
-                    property real springing: line.active ? 1 : 19 / 22
-                    property real eased: line.active ? 1 : 19 / 22
-                    scale: Appearance.reduceMotion ? eased : springing
-                    opacity: line.active ? 1 : 0.34
+                delegate: Item {
+                    id: line
 
-                    Behavior on springing {
-                        enabled: !root.suspended && !Appearance.reduceMotion
-                        Bounce {}
+                    required property int index
+                    required property string words
+                    required property int startTimeMs
+                    readonly property bool active: !Player.lyricsSynchronized || Player.activeLyricIndex === index
+
+                    width: list.width - list.leftMargin - list.rightMargin
+                    height: text.implicitHeight
+
+                    property real lag: 0
+                    transform: Translate { y: line.lag }
+
+                    Connections {
+                        target: list
+                        function onStepped(delta: real) {
+                            line.lag += delta
+                            settle.restart()
+                        }
                     }
-                    Behavior on eased {
-                        enabled: !root.suspended && Appearance.reduceMotion && !Appearance.performanceMode
-                        NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+                    SequentialAnimation {
+                        id: settle
+                        PauseAnimation { duration: Math.min(Math.abs(line.index - Player.activeLyricIndex), 8) * 16 }
+                        NumberAnimation { target: line; property: "lag"; to: 0; duration: 560; easing.type: Easing.OutBack; easing.overshoot: 0.6 }
                     }
-                    Behavior on opacity {
-                        enabled: !root.suspended
-                        NumberAnimation { duration: Appearance.duration(280); easing.type: Easing.InOutQuad }
+
+                    StyledText {
+                        id: text
+                        width: parent.width
+                        transformOrigin: Item.TopLeft
+                        text: line.words.length > 0 ? line.words : "♪"
+                        wrapMode: Text.Wrap
+                        font.pixelSize: 20
+                        font.weight: Font.Bold
+                        color: root.scheme.onSurface
+                        property real springing: line.active ? 1 : 17 / 20
+                        property real eased: line.active ? 1 : 17 / 20
+                        scale: Appearance.reduceMotion ? eased : springing
+                        opacity: line.active ? 1 : 0.34
+
+                        Behavior on springing {
+                            enabled: !root.suspended && !Appearance.reduceMotion
+                            Bounce {}
+                        }
+                        Behavior on eased {
+                            enabled: !root.suspended && Appearance.reduceMotion && !Appearance.performanceMode
+                            NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+                        }
+                        Behavior on opacity {
+                            enabled: !root.suspended
+                            NumberAnimation { duration: Appearance.duration(280); easing.type: Easing.InOutQuad }
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: Player.lyricsSynchronized
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: Player.seekToLyricLine(line.index)
                     }
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: Player.lyricsSynchronized
-                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: Player.seekToLyricLine(line.index)
+                footer: StyledText {
+                    topPadding: 18
+                    text: qsTr("Lyrics provided by ") + Player.lyricsProvider
+                    font.pixelSize: Appearance.fontSize.smaller
+                    color: root.scheme.outline
                 }
-            }
-
-            footer: StyledText {
-                topPadding: 18
-                text: qsTr("Lyrics provided by ") + Player.lyricsProvider
-                font.pixelSize: Appearance.fontSize.smaller
-                color: root.scheme.outline
             }
         }
     }
