@@ -19,16 +19,19 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Templates as T
 import Swiftify
 
 // Now Playing (NowPlayingPanel): full-width artwork with blurred metadata
-// overlay, action buttons, and the lyrics column below it.
+// overlay, action buttons, the lyrics column below it, and a next-song button.
 Item {
     id: root
 
     /// under the immersive player: the lines change, nothing scrolls
     property bool suspended: false
     property MaterialScheme scheme: Appearance.colors
+    readonly property bool hasNextSong: Player.hasSong && Player.upNext.count > 0
+    readonly property song nextSong: Player.upNext.at(Player.upNext.count > 0 ? 0 : -1)
 
     StyledText {
         id: header
@@ -194,10 +197,10 @@ Item {
         anchors.topMargin: Player.hasSong ? artwork.height + 20 : 12
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.bottom: nextButton.visible ? nextButton.top : parent.bottom
         anchors.leftMargin: 18
         anchors.rightMargin: 18
-        anchors.bottomMargin: 18
+        anchors.bottomMargin: nextButton.visible ? 10 : 18
         radius: Appearance.rounding.normal
         color: root.scheme.layer2
         clip: true
@@ -404,6 +407,210 @@ Item {
                     color: root.scheme.outline
                 }
             }
+        }
+    }
+
+    T.AbstractButton {
+        id: nextButton
+
+        readonly property list<string> badgeShapes: [
+            "cookie4", "cookie6", "cookie7", "cookie9", "cookie12",
+            "clover4", "clover8", "sunny", "verySunny", "softBurst",
+            "flower", "puffy", "softCookie", "bun", "gem", "pentagon"
+        ]
+        property string badgeShape: "cookie9"
+
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        anchors.bottomMargin: 18
+        height: 54
+        visible: root.hasNextSong
+        enabled: Player.canSkipForward
+        padding: 0
+        hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        scale: down ? 0.96 : (hovered ? 1.01 : 1)
+
+        Behavior on scale {
+            enabled: !Appearance.performanceMode
+            Bounce {}
+        }
+
+        onHoveredChanged: {
+            if (hovered) {
+                let pick = badgeShape
+                while (pick === badgeShape && badgeShapes.length > 1) {
+                    pick = badgeShapes[Math.floor(Math.random() * badgeShapes.length)]
+                }
+                badgeShape = pick
+            }
+        }
+
+        onPressed: {
+            if (Appearance.performanceMode || Settings.noShapes) {
+                return
+            }
+            pressBurst.shape = badgeShape
+            pressBurst.spinAngle = badgeDrift.value
+            pressBurst.burstSize = 36
+            pressBurst.morph = 0
+            pressBurst.opacity = 0.9
+            burstExpand.to = Math.max(nextButton.width * 2.1, nextButton.height * 2.1)
+            burstAnim.restart()
+        }
+
+        onClicked: Player.skipForward()
+
+        ParallelAnimation {
+            id: burstAnim
+
+            NumberAnimation {
+                id: burstExpand
+                target: pressBurst
+                property: "burstSize"
+                duration: Appearance.duration(440)
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: pressBurst
+                property: "morph"
+                from: 0
+                to: 1
+                duration: Appearance.duration(440)
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: pressBurst
+                property: "opacity"
+                from: 0.9
+                to: 0
+                duration: Appearance.duration(440)
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        background: WavyClip {
+            radius: Appearance.rounding.normal
+            wavy: nextButton.hovered
+            depth: 2.5
+            wavelength: 18
+
+            Rectangle {
+                anchors.fill: parent
+                radius: Appearance.rounding.normal
+                color: nextButton.hovered ? root.scheme.surfaceContainerHighest : root.scheme.layer2
+
+                Behavior on color {
+                    ElementMoveFastColor {}
+                }
+            }
+
+            MaterialShape {
+                id: pressBurst
+                property real burstSize: 36
+                x: nextButton.width - 9 - 18 - width / 2
+                y: nextButton.height / 2 - height / 2
+                width: burstSize
+                height: burstSize
+                parentClipRadius: Appearance.rounding.normal
+                shape: nextButton.badgeShape
+                morphTo: "circle"
+                color: root.scheme.primaryContainer
+                opacity: 0
+                visible: opacity > 0.005
+            }
+        }
+
+        contentItem: Item {
+            anchors.fill: parent
+
+            ArtworkImage {
+                id: nextArt
+                x: 8
+                anchors.verticalCenter: parent.verticalCenter
+                width: 38
+                height: 38
+                radius: Appearance.sizes.smallArtworkRadius
+                source: root.nextSong.artworkUrl
+                crossfade: true
+            }
+
+            Column {
+                anchors.left: nextArt.right
+                anchors.leftMargin: 10
+                anchors.right: nextBadge.left
+                anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 1
+
+                StyledText {
+                    width: parent.width
+                    text: root.nextSong.name
+                    elide: Text.ElideRight
+                    font.pixelSize: Appearance.fontSize.smallie
+                    font.weight: Font.DemiBold
+                    color: root.scheme.onSurface
+                }
+                StyledText {
+                    width: parent.width
+                    text: root.nextSong.artists
+                    elide: Text.ElideRight
+                    font.pixelSize: Appearance.fontSize.smaller
+                    color: root.scheme.onSurfaceVariant
+                }
+            }
+
+            Item {
+                id: nextBadge
+                anchors.right: parent.right
+                anchors.rightMargin: 9
+                anchors.verticalCenter: parent.verticalCenter
+                width: 36
+                height: 36
+
+                MaterialShape {
+                    id: nextBadgeShape
+                    anchors.fill: parent
+                    shape: nextButton.badgeShape
+                    spinAngle: badgeDrift.value
+                    color: root.scheme.primaryContainer
+                    scale: nextButton.hovered && !burstAnim.running ? 1 : 0
+                    opacity: nextButton.hovered && !burstAnim.running ? 1 : 0
+
+                    Behavior on scale {
+                        enabled: !Appearance.performanceMode
+                        Bounce {}
+                    }
+                    Behavior on opacity {
+                        NumberAnimation { duration: Appearance.duration(140); easing.type: Easing.OutCubic }
+                    }
+
+                    Drift {
+                        id: badgeDrift
+                        active: nextButton.hovered && nextButton.visible && !Settings.noShapes
+                        speed: 40
+                        period: 360
+                    }
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "skip_next"
+                    iconSize: 20
+                    color: nextButton.hovered && !burstAnim.running ? root.scheme.onPrimaryContainer : root.scheme.onSurfaceVariant
+
+                    Behavior on color {
+                        ElementMoveFastColor {}
+                    }
+                }
+            }
+        }
+
+        HoverHandler {
+            cursorShape: nextButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         }
     }
 }
