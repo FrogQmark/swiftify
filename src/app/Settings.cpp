@@ -161,6 +161,7 @@ void Settings::load()
     m_loggingEnabled = stored<bool>(m_store, "loggingEnabled", m_loggingEnabled);
     m_pinnedPlaylistsExpanded = stored<bool>(m_store, "pinnedPlaylistsExpanded", m_pinnedPlaylistsExpanded);
     m_allPlaylistsExpanded = stored<bool>(m_store, "allPlaylistsExpanded", m_allPlaylistsExpanded);
+    m_nowPlayingLyricsExpanded = stored<bool>(m_store, "nowPlayingLyricsExpanded", m_nowPlayingLyricsExpanded);
     {
         const QString raw = stored<QString>(m_store, "immersivePlayerPanel", m_immersivePlayerPanel);
         m_immersivePlayerPanel = oneOf(raw, {QStringLiteral("artwork"), QStringLiteral("lyrics"), QStringLiteral("queue"), QStringLiteral("sleep"), QStringLiteral("audio")}, QStringLiteral("lyrics"));
@@ -426,6 +427,16 @@ void Settings::setAllPlaylistsExpanded(bool value)
     m_allPlaylistsExpanded = value;
     m_store.setValue(QStringLiteral("allPlaylistsExpanded"), value);
     emit allPlaylistsExpandedChanged();
+}
+
+void Settings::setNowPlayingLyricsExpanded(bool value)
+{
+    if (m_nowPlayingLyricsExpanded == value) {
+        return;
+    }
+    m_nowPlayingLyricsExpanded = value;
+    m_store.setValue(QStringLiteral("nowPlayingLyricsExpanded"), value);
+    emit nowPlayingLyricsExpandedChanged();
 }
 
 void Settings::setImmersivePlayerPanel(const QString &raw)

@@ -30,7 +30,7 @@ Item {
     /// under the immersive player: the lines change, nothing scrolls
     property bool suspended: false
     property MaterialScheme scheme: Appearance.colors
-    property bool lyricsMaximized: false
+    readonly property bool lyricsMaximized: Settings.nowPlayingLyricsExpanded
     property real maxProgress: lyricsMaximized ? 1 : 0
     readonly property real fadeProgress: Math.max(0, Math.min(1, maxProgress))
     readonly property bool hasNextSong: Player.hasSong && Player.upNext.count > 0
@@ -395,7 +395,7 @@ Item {
                     }
                 }
                 onClicked: {
-                    root.lyricsMaximized = !root.lyricsMaximized
+                    Settings.nowPlayingLyricsExpanded = !Settings.nowPlayingLyricsExpanded
                     Qt.callLater(() => list.follow(true))
                 }
             }
