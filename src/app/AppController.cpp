@@ -226,8 +226,11 @@ void AppController::collect()
 
 void AppController::releaseMemory()
 {
+    // only drop gpu caches while the window is hidden: releasing them on a
+    // visible window forces the render thread to rebuild shaders and fbos
+    // again on the next open
     for (QWindow *window : QGuiApplication::topLevelWindows()) {
-        if (auto *quick = qobject_cast<QQuickWindow *>(window); quick && quick->isVisible()) {
+        if (auto *quick = qobject_cast<QQuickWindow *>(window); quick && !quick->isVisible()) {
             quick->releaseResources();
         }
     }

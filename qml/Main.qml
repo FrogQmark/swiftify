@@ -110,6 +110,8 @@ ApplicationWindow {
         if (App.macOS || App.windows || Player.playing || (Settings.trayIcon && App.trayAvailable)) {
             close.accepted = false
             window.hide()
+            window.immersiveWarmed = false
+            window.immersiveWarmFrames = 2
             App.trimMemory()
         } else {
             Qt.quit()
@@ -247,7 +249,8 @@ ApplicationWindow {
         id: shell
         anchors.fill: parent
         // nothing under the opaque immersive player is drawn, or animates
-        visible: window.onScreen && !Session.evaluatingStoredLogin && window.immersiveReveal < 1
+        visible: window.onScreen && !Session.evaluatingStoredLogin
+                 && (window.immersiveReveal < 1 || immersive.status !== Loader.Ready)
 
         // the top edge moves the window, as a title bar would: the gutter
         // above the page and, on macos, the traffic lights' strip. it sits
@@ -503,6 +506,10 @@ ApplicationWindow {
     /// rather than opening through a shape; performance mode just shows it
     readonly property bool immersiveFades: Appearance.reduceMotion && !Appearance.performanceMode
     property real immersiveFade: 1
+    /// the immersive player is built at launch and given one frame on the gpu
+    /// so its shaders and fbos are ready before the first open
+    property bool immersiveWarmed: false
+    property int immersiveWarmFrames: 2
 
     /// a duration of the opening or closing shape's, none while it fades
     function shapeMotion(milliseconds: int): int {
@@ -602,12 +609,11 @@ ApplicationWindow {
     }
 
     // closing shrinks the shape away into the middle as it turns, quickly
-    // at first and settling as it goes; the player is let go of once it has
-    // gone, and what it held handed back. with reduced motion it fades away
+    // at first and settling as it goes; the player stays built so reopening it
+    // does not rebuild its shaders and fbos. with reduced motion it fades away
     // where it stands, over the window drawn again under it
     SequentialAnimation {
         id: closeMotion
-        onFinished: App.trimMemory()
         PropertyAction { target: window; property: "immersiveReveal"; value: Math.min(window.immersiveReveal, 0.99) }
         NumberAnimation {
             target: window
@@ -644,19 +650,20 @@ ApplicationWindow {
 
     // the immersive player opens through a shape that grows from the middle
     // of the window and closes through the same shape shrinking away. it is
-    // only built while it shows, and only drawn through the shape while it
-    // opens or closes.
+    // built at launch (warmed at near-zero opacity so the render thread compiles
+    // its shaders and fbos without hitching the first open) and kept alive; the
+    // shape mask layer only turns on while it opens or closes.
     Loader {
         id: immersive
         anchors.fill: parent
-        visible: window.onScreen && window.immersiveReveal > 0
-        active: window.immersiveReveal > 0
-        // built a little at a time between frames while the shape grows,
-        // rather than all at once in the frame the click lands: that held
-        // up the window for most of a tenth of a second
+        visible: window.onScreen && (window.immersiveReveal > 0 || !window.immersiveWarmed)
+        active: true
+        // built a little at a time between frames at launch, rather than all
+        // at once on the startup frame
         asynchronous: true
+        enabled: window.immersiveReveal > 0
         focus: UiState.immersiveOpen
-        opacity: window.immersiveFade
+        opacity: window.immersiveReveal > 0 ? window.immersiveFade : 0.001
         onLoaded: {
             if (window.immersiveFades && UiState.immersiveOpen && !openMotion.running && window.immersiveReveal < 1) {
                 fadeInMotion.restart()
@@ -686,6 +693,17 @@ ApplicationWindow {
             windowControlsTopInset: window.inAppWindowControls ? appWindowControls.y + appWindowControls.height : 0
             focus: true
             onCloseRequested: UiState.immersiveOpen = false
+        }
+    }
+
+    Connections {
+        target: window
+        enabled: !window.immersiveWarmed && window.onScreen && immersive.status === Loader.Ready
+        function onFrameSwapped() {
+            window.immersiveWarmFrames -= 1
+            if (window.immersiveWarmFrames <= 0) {
+                window.immersiveWarmed = true
+            }
         }
     }
 

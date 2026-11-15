@@ -297,7 +297,21 @@ FocusScope {
     Component.onCompleted: {
         panel = resolvedPanel(Settings.immersivePlayerPanel)
         shownPanel = panel
-        forceActiveFocus()
+        if (visible && enabled) {
+            forceActiveFocus()
+        }
+    }
+
+    onVisibleChanged: {
+        if (visible && enabled) {
+            forceActiveFocus()
+        }
+    }
+
+    onEnabledChanged: {
+        if (visible && enabled) {
+            forceActiveFocus()
+        }
     }
 
     Keys.onPressed: (event) => {
@@ -612,7 +626,7 @@ FocusScope {
         wave: Settings.visualizerShape === "wave"
         continuous: Settings.continuousVisualizer
         sensitivity: Settings.visualizerSensitivity
-        active: Player.playing && root.showsSpectrum
+        active: Player.playing && root.showsSpectrum && root.visible
         opacity: !root.showsSpectrum ? 0 : (root.usesPanelLayout ? 0.74 : 1)
 
         Behavior on opacity {

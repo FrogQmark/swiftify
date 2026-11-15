@@ -167,7 +167,7 @@ Item {
                 kind: SpectrumView.Ring
                 wave: Settings.visualizerShape === "wave"
                 sensitivity: Settings.visualizerSensitivity
-                active: Player.playing && root.showsRing
+                active: Player.playing && root.showsRing && visible
                 // the bars rise from under the cover and are cut along its
                 // squiggle line, so they start where the line is
                 cutWaves: cover.showsSquiggle ? cover.squiggleWaves : 0
