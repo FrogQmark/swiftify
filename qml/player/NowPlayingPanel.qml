@@ -33,17 +33,17 @@ Item {
     StyledText {
         id: header
         x: 18
-        y: 16
+        y: Math.round((36 - implicitHeight) / 2)
         text: qsTr("Now Playing")
-        font.pixelSize: Appearance.fontSize.normal
+        font.pixelSize: Appearance.fontSize.smallie
         font.weight: Font.DemiBold
         color: root.scheme.onSurfaceVariant
     }
 
     Item {
         id: artworkStage
-        anchors.top: header.bottom
-        anchors.topMargin: 12
+        anchors.top: parent.top
+        anchors.topMargin: 36
         anchors.left: parent.left
         anchors.right: parent.right
         height: artwork.height + overlayBox.bleed
@@ -191,7 +191,7 @@ Item {
     Rectangle {
         id: lyricsContainer
         anchors.top: Player.hasSong ? artworkStage.top : header.bottom
-        anchors.topMargin: Player.hasSong ? artwork.height + 12 : 12
+        anchors.topMargin: Player.hasSong ? artwork.height + 20 : 12
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -267,7 +267,7 @@ Item {
                 anchors.fill: parent
                 Reveal.shown: !Player.loadingLyrics && Player.hasLyrics
                 model: Player.lyrics
-                spacing: 20
+                spacing: 14
                 topMargin: 18
                 bottomMargin: 22
                 leftMargin: 16
@@ -281,8 +281,8 @@ Item {
                 layer.effect: ShaderEffect {
                     property variant source
                     property size itemSize: Qt.size(list.width, list.height)
-                    property real edgePx: 34
-                    property real maxSigma: Appearance.performanceMode ? 0 : 2.2
+                    property real edgePx: 32
+                    property real maxSigma: Appearance.performanceMode ? 0 : 1.2
                     fragmentShader: "qrc:/shaders/lyrics_edge_fade.frag.qsb"
                 }
 
@@ -339,9 +339,10 @@ Item {
                     required property string words
                     required property int startTimeMs
                     readonly property bool active: !Player.lyricsSynchronized || Player.activeLyricIndex === index
+                    readonly property bool highlighted: Player.lyricsSynchronized && Player.activeLyricIndex === index
 
                     width: list.width - list.leftMargin - list.rightMargin
-                    height: text.implicitHeight
+                    height: text.implicitHeight + (highlighted ? 12 : 0)
 
                     property real lag: 0
                     transform: Translate { y: line.lag }
@@ -361,6 +362,7 @@ Item {
 
                     StyledText {
                         id: text
+                        y: line.highlighted ? 6 : 0
                         width: parent.width
                         transformOrigin: Item.TopLeft
                         text: line.words.length > 0 ? line.words : "♪"
