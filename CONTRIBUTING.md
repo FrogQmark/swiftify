@@ -71,7 +71,7 @@ spotify and its renderers.
 
 - an idle or hidden window should cost close to nothing
 - dont add timers, polling or per frame work when a signal or binding does the job
-- free images, buffers and models when a view goes away instead of keeping them around
+- free images, buffers and models when a view goes away instead of keeping them around, unless rebuilding them on reopen would hitch (like shaders or gpu resources for the immersive background, which are warmed at launch and kept until exit)
 - if a change touches rendering, run `bench_frames` before and after and say what changed in the pr
 - if a feature costs a lot, make it something people can turn off
 
