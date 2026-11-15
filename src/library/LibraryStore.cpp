@@ -292,7 +292,7 @@ void LibraryStore::recordPlaybackSource(SongListModel *model, bool fromSearch)
         m_playbackSourceKind = PlaybackSourceKind::SavedSongs;
     } else if (model && model == m_recentlyPlayed) {
         m_playbackSourceKind = PlaybackSourceKind::Home;
-    } else if (model && m_localFiles && model == m_localFiles->tracks()) {
+    } else if (model && m_localFiles && model == m_localFiles->songs()) {
         m_playbackSourceKind = PlaybackSourceKind::LocalTracks;
     } else if (model && m_destination.page == Page::Stats) {
         m_playbackSourceKind = PlaybackSourceKind::Stats;
@@ -317,11 +317,11 @@ void LibraryStore::syncPlaybackSource()
 
     const Song current = m_player->currentSong();
     if (m_playbackSourceKind == PlaybackSourceKind::None) {
-        m_playbackSourceKind = (!current.isLocalFile && !current.albumName.isEmpty())
+        m_playbackSourceKind = (!current.isLocalFile() && !current.albumName.isEmpty())
             ? PlaybackSourceKind::SongAlbum
             : PlaybackSourceKind::None;
     } else if (m_playbackSourceKind == PlaybackSourceKind::SongAlbum
-               && (current.isLocalFile || current.albumName.isEmpty())) {
+               && (current.isLocalFile() || current.albumName.isEmpty())) {
         m_playbackSourceKind = PlaybackSourceKind::None;
     }
     emit playbackSourceChanged();
