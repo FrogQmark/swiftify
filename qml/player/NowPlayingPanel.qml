@@ -19,7 +19,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
-import QtQuick.Effects
 import Swiftify
 
 // Now Playing (NowPlayingPanel): full-width artwork with blurred metadata
@@ -65,22 +64,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 20
-
-            Item {
-                id: overlayMask
-                anchors.fill: parent
-                visible: false
-                layer.enabled: true
-
-                Rectangle {
-                    anchors.fill: parent
-                    topLeftRadius: 0
-                    topRightRadius: 0
-                    bottomLeftRadius: Appearance.sizes.artworkRadius
-                    bottomRightRadius: Appearance.sizes.artworkRadius
-                }
-            }
+            height: Math.min(artwork.height, Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 52)
 
             ShaderEffectSource {
                 id: overlayBackdrop
@@ -92,24 +76,14 @@ Item {
                 visible: false
             }
 
-            MultiEffect {
+            ShaderEffect {
                 anchors.fill: parent
-                visible: !Appearance.performanceMode
-                source: overlayBackdrop
-                blurEnabled: true
-                blur: 0.85
-                blurMax: 36
-                maskEnabled: true
-                maskSource: overlayMask
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                topLeftRadius: 0
-                topRightRadius: 0
-                bottomLeftRadius: Appearance.sizes.artworkRadius
-                bottomRightRadius: Appearance.sizes.artworkRadius
-                color: Qt.rgba(0, 0, 0, Appearance.performanceMode ? 0.72 : 0.48)
+                property variant source: overlayBackdrop
+                property size itemSize: Qt.size(width, height)
+                property real cornerRadius: Appearance.sizes.artworkRadius
+                property real maxBlur: Appearance.performanceMode ? 0 : 22
+                property real maxTint: Appearance.performanceMode ? 0.72 : 0.56
+                fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
             }
 
             Column {
@@ -118,7 +92,8 @@ Item {
                 anchors.leftMargin: 14
                 anchors.right: overlayButtons.left
                 anchors.rightMargin: 8
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 12
                 spacing: 2
 
                 StyledText {
@@ -142,7 +117,7 @@ Item {
                 id: overlayButtons
                 anchors.right: parent.right
                 anchors.rightMargin: 8
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenter: metadataColumn.verticalCenter
                 spacing: 2
 
                 IconButton {
