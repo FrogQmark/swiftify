@@ -55,6 +55,7 @@
 #include <atomic>
 #include <cwchar>
 #include <functional>
+#include <limits>
 
 namespace swiftify {
 
@@ -75,18 +76,14 @@ COLORREF nativeColor(const QColor &color)
 }
 
 #ifdef SWIFTIFY_HAVE_SMTC
-// the media buttons' handler, written out by hand: wrl's Callback lives in
-// <wrl/event.h>, which only msvc's sdk ships, and mingw has to build this too
-using ButtonPressedHandler = ABI::Windows::Foundation::ITypedEventHandler<
-    ABI::Windows::Media::SystemMediaTransportControls *,
-    ABI::Windows::Media::SystemMediaTransportControlsButtonPressedEventArgs *>;
-
-class ButtonPressedCallback final : public ButtonPressedHandler
+// written out by hand instead of wrl's Callback (<wrl/event.h>), which only msvc ships
+template <typename Handler, typename Args, typename Value, HRESULT (STDMETHODCALLTYPE Args::*Getter)(Value *)>
+class SmtcEventCallback final : public Handler
 {
 public:
-    using Function = std::function<void(ABI::Windows::Media::SystemMediaTransportControlsButton)>;
+    using Function = std::function<void(Value)>;
 
-    explicit ButtonPressedCallback(Function function)
+    explicit SmtcEventCallback(Function function)
         : m_function(std::move(function))
     {
     }
@@ -95,8 +92,8 @@ public:
     {
         if (!object) return E_POINTER;
         if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IAgileObject)
-            || IsEqualIID(riid, __uuidof(ButtonPressedHandler))) {
-            *object = static_cast<ButtonPressedHandler *>(this);
+            || IsEqualIID(riid, __uuidof(Handler))) {
+            *object = static_cast<Handler *>(this);
             AddRef();
             return S_OK;
         }
@@ -113,12 +110,11 @@ public:
         return remaining;
     }
 
-    HRESULT STDMETHODCALLTYPE Invoke(ABI::Windows::Media::ISystemMediaTransportControls *,
-                                     ABI::Windows::Media::ISystemMediaTransportControlsButtonPressedEventArgs *args) override
+    HRESULT STDMETHODCALLTYPE Invoke(ABI::Windows::Media::ISystemMediaTransportControls *, Args *args) override
     {
-        ABI::Windows::Media::SystemMediaTransportControlsButton button;
-        if (args && SUCCEEDED(args->get_Button(&button))) {
-            m_function(button);
+        Value value {};
+        if (args && SUCCEEDED((args->*Getter)(&value))) {
+            m_function(value);
         }
         return S_OK;
     }
@@ -142,7 +138,11 @@ struct WindowsIntegration::Native {
 
 #ifdef SWIFTIFY_HAVE_SMTC
     Microsoft::WRL::ComPtr<ABI::Windows::Media::ISystemMediaTransportControls> controls;
+    Microsoft::WRL::ComPtr<ABI::Windows::Media::ISystemMediaTransportControls2> controls2;
     EventRegistrationToken buttonToken {};
+    EventRegistrationToken positionToken {};
+    EventRegistrationToken shuffleToken {};
+    EventRegistrationToken repeatToken {};
 #endif
 
     Native()
@@ -160,6 +160,21 @@ struct WindowsIntegration::Native {
     void cleanupMediaControls()
     {
 #ifdef SWIFTIFY_HAVE_SMTC
+        if (controls2) {
+            if (positionToken.value != 0) {
+                controls2->remove_PlaybackPositionChangeRequested(positionToken);
+                positionToken.value = 0;
+            }
+            if (shuffleToken.value != 0) {
+                controls2->remove_ShuffleEnabledChangeRequested(shuffleToken);
+                shuffleToken.value = 0;
+            }
+            if (repeatToken.value != 0) {
+                controls2->remove_AutoRepeatModeChangeRequested(repeatToken);
+                repeatToken.value = 0;
+            }
+            controls2.Reset();
+        }
         if (controls) {
             if (buttonToken.value != 0) {
                 controls->remove_ButtonPressed(buttonToken);
@@ -315,16 +330,22 @@ WindowsIntegration::WindowsIntegration(PlaybackController *player, Theme *theme,
     connect(m_theme, &Theme::schemeChanged, this, &WindowsIntegration::styleWindow);
     connect(m_player, &PlaybackController::playingChanged, this, &WindowsIntegration::updateButtons);
     connect(m_player, &PlaybackController::playingChanged, this, &WindowsIntegration::updateMediaControls);
+    connect(m_player, &PlaybackController::playingChanged, this, &WindowsIntegration::updateMediaTimeline);
     connect(m_player, &PlaybackController::queueChanged, this, &WindowsIntegration::updateButtons);
     connect(m_player, &PlaybackController::queueChanged, this, &WindowsIntegration::updateMediaControls);
     connect(m_player, &PlaybackController::currentSongChanged, this, &WindowsIntegration::updateButtons);
     connect(m_player, &PlaybackController::currentSongChanged, this, &WindowsIntegration::updateMediaControls);
     connect(m_player, &PlaybackController::currentSongChanged, this, &WindowsIntegration::updateMediaMetadata);
+    connect(m_player, &PlaybackController::currentSongChanged, this, &WindowsIntegration::updateMediaTimeline);
     connect(m_player, &PlaybackController::mediaStateChanged, this, &WindowsIntegration::updateMediaControls);
     connect(m_player, &PlaybackController::mediaStateChanged, this, &WindowsIntegration::updateMediaMetadata);
+    connect(m_player, &PlaybackController::shuffleChanged, this, &WindowsIntegration::updateMediaControls);
+    connect(m_player, &PlaybackController::repeatModeChanged, this, &WindowsIntegration::updateMediaControls);
     connect(m_player, &PlaybackController::loadingChanged, this, &WindowsIntegration::updateProgress);
     connect(m_player, &PlaybackController::livePositionChanged, this, &WindowsIntegration::updateProgress);
+    connect(m_player, &PlaybackController::positionChanged, this, &WindowsIntegration::updateMediaTimeline);
     connect(m_player, &PlaybackController::durationChanged, this, &WindowsIntegration::updateProgress);
+    connect(m_player, &PlaybackController::durationChanged, this, &WindowsIntegration::updateMediaTimeline);
 }
 
 WindowsIntegration::~WindowsIntegration()
@@ -559,6 +580,11 @@ void WindowsIntegration::initializeMediaControls()
     m_native->controls->put_IsNextEnabled(true);
     m_native->controls->put_IsPreviousEnabled(true);
 
+    using ButtonPressedHandler = ITypedEventHandler<SystemMediaTransportControls *, SystemMediaTransportControlsButtonPressedEventArgs *>;
+    using ButtonPressedCallback = SmtcEventCallback<
+        ButtonPressedHandler, ISystemMediaTransportControlsButtonPressedEventArgs,
+        SystemMediaTransportControlsButton, &ISystemMediaTransportControlsButtonPressedEventArgs::get_Button>;
+
     m_native->buttonToken.value = 0;
     // the buttons are pressed on a thread of windows' own; the press is
     // queued onto this one
@@ -570,8 +596,54 @@ void WindowsIntegration::initializeMediaControls()
     }));
     m_native->controls->add_ButtonPressed(handler.Get(), &m_native->buttonToken);
 
+    if (SUCCEEDED(m_native->controls.As(&m_native->controls2)) && m_native->controls2) {
+        using PositionHandler = ITypedEventHandler<SystemMediaTransportControls *, PlaybackPositionChangeRequestedEventArgs *>;
+        using PositionCallback = SmtcEventCallback<
+            PositionHandler, IPlaybackPositionChangeRequestedEventArgs,
+            TimeSpan, &IPlaybackPositionChangeRequestedEventArgs::get_RequestedPlaybackPosition>;
+        ComPtr<PositionHandler> positionHandler;
+        positionHandler.Attach(new PositionCallback([this](TimeSpan position) {
+            const int positionMs = int(qBound<qint64>(0, position.Duration / 10000LL, std::numeric_limits<int>::max()));
+            QMetaObject::invokeMethod(this, [this, positionMs] {
+                m_player->seek(positionMs);
+            }, Qt::QueuedConnection);
+        }));
+        m_native->controls2->add_PlaybackPositionChangeRequested(positionHandler.Get(), &m_native->positionToken);
+
+        using ShuffleHandler = ITypedEventHandler<SystemMediaTransportControls *, ShuffleEnabledChangeRequestedEventArgs *>;
+        using ShuffleCallback = SmtcEventCallback<
+            ShuffleHandler, IShuffleEnabledChangeRequestedEventArgs,
+            boolean, &IShuffleEnabledChangeRequestedEventArgs::get_RequestedShuffleEnabled>;
+        ComPtr<ShuffleHandler> shuffleHandler;
+        shuffleHandler.Attach(new ShuffleCallback([this](boolean enabled) {
+            const bool requested = enabled != 0;
+            QMetaObject::invokeMethod(this, [this, requested] {
+                if (requested != m_player->isShuffleEnabled()) {
+                    m_player->toggleShuffle();
+                }
+            }, Qt::QueuedConnection);
+        }));
+        m_native->controls2->add_ShuffleEnabledChangeRequested(shuffleHandler.Get(), &m_native->shuffleToken);
+
+        using RepeatHandler = ITypedEventHandler<SystemMediaTransportControls *, AutoRepeatModeChangeRequestedEventArgs *>;
+        using RepeatCallback = SmtcEventCallback<
+            RepeatHandler, IAutoRepeatModeChangeRequestedEventArgs,
+            MediaPlaybackAutoRepeatMode, &IAutoRepeatModeChangeRequestedEventArgs::get_RequestedAutoRepeatMode>;
+        ComPtr<RepeatHandler> repeatHandler;
+        repeatHandler.Attach(new RepeatCallback([this](MediaPlaybackAutoRepeatMode mode) {
+            PlaybackController::RepeatMode target = PlaybackController::RepeatMode::Off;
+            if (mode == MediaPlaybackAutoRepeatMode_List) target = PlaybackController::RepeatMode::All;
+            else if (mode == MediaPlaybackAutoRepeatMode_Track) target = PlaybackController::RepeatMode::One;
+            QMetaObject::invokeMethod(this, [this, target] {
+                m_player->setRepeatMode(target);
+            }, Qt::QueuedConnection);
+        }));
+        m_native->controls2->add_AutoRepeatModeChangeRequested(repeatHandler.Get(), &m_native->repeatToken);
+    }
+
     updateMediaMetadata();
     updateMediaControls();
+    updateMediaTimeline();
 }
 
 void WindowsIntegration::handleMediaButton(int button)
@@ -615,6 +687,48 @@ void WindowsIntegration::updateMediaControls()
         m_native->controls->put_IsNextEnabled(m_player->canSkipForward());
         m_native->controls->put_IsPreviousEnabled(m_player->canSkipBackward());
     }
+    if (m_native->controls2) {
+        m_native->controls2->put_IsShuffleEnabled(m_player->isShuffleEnabled() ? TRUE : FALSE);
+        MediaPlaybackAutoRepeatMode repeatMode = MediaPlaybackAutoRepeatMode_None;
+        if (m_player->repeatMode() == PlaybackController::RepeatMode::All) {
+            repeatMode = MediaPlaybackAutoRepeatMode_List;
+        } else if (m_player->repeatMode() == PlaybackController::RepeatMode::One) {
+            repeatMode = MediaPlaybackAutoRepeatMode_Track;
+        }
+        m_native->controls2->put_AutoRepeatMode(repeatMode);
+    }
+}
+
+void WindowsIntegration::updateMediaTimeline()
+{
+    if (!m_native || !m_native->controls2) return;
+    using namespace ABI::Windows::Media;
+    using namespace ABI::Windows::Foundation;
+    using Microsoft::WRL::ComPtr;
+    using Microsoft::WRL::Wrappers::HStringReference;
+
+    HStringReference timelineClass(RuntimeClass_Windows_Media_SystemMediaTransportControlsTimelineProperties);
+    ComPtr<IInspectable> inspectable;
+    if (FAILED(RoActivateInstance(timelineClass.Get(), &inspectable)) || !inspectable) {
+        return;
+    }
+    ComPtr<ISystemMediaTransportControlsTimelineProperties> timeline;
+    if (FAILED(inspectable.As(&timeline)) || !timeline) {
+        return;
+    }
+
+    const qint64 durationTicks = m_player->hasSong() ? qMax(0, m_player->durationMs()) * 10000LL : 0;
+    const qint64 positionTicks = m_player->hasSong()
+        ? qBound<qint64>(0, qint64(m_player->livePositionMs()) * 10000LL, durationTicks)
+        : 0;
+
+    timeline->put_StartTime(TimeSpan{0});
+    timeline->put_MinSeekTime(TimeSpan{0});
+    timeline->put_EndTime(TimeSpan{durationTicks});
+    timeline->put_MaxSeekTime(TimeSpan{durationTicks});
+    timeline->put_Position(TimeSpan{positionTicks});
+
+    m_native->controls2->UpdateTimelineProperties(timeline.Get());
 }
 
 void WindowsIntegration::updateMediaMetadata()
@@ -689,6 +803,7 @@ void WindowsIntegration::initializeMediaControls() {}
 void WindowsIntegration::handleMediaButton(int) {}
 void WindowsIntegration::updateMediaControls() {}
 void WindowsIntegration::updateMediaMetadata() {}
+void WindowsIntegration::updateMediaTimeline() {}
 #endif
 
 } // namespace swiftify

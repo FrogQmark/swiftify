@@ -1167,16 +1167,22 @@ void PlaybackController::toggleShuffle()
     syncMediaSession();
 }
 
-void PlaybackController::cycleRepeatMode()
+void PlaybackController::setRepeatMode(RepeatMode mode)
 {
-    switch (m_repeatMode) {
-    case RepeatMode::Off: m_repeatMode = RepeatMode::All; break;
-    case RepeatMode::All: m_repeatMode = RepeatMode::One; break;
-    case RepeatMode::One: m_repeatMode = RepeatMode::Off; break;
-    }
+    if (m_repeatMode == mode) return;
+    m_repeatMode = mode;
     emit repeatModeChanged();
     emit queueChanged();
     syncMediaSession();
+}
+
+void PlaybackController::cycleRepeatMode()
+{
+    switch (m_repeatMode) {
+    case RepeatMode::Off: setRepeatMode(RepeatMode::All); break;
+    case RepeatMode::All: setRepeatMode(RepeatMode::One); break;
+    case RepeatMode::One: setRepeatMode(RepeatMode::Off); break;
+    }
 }
 
 // --- the playing song ---------------------------------------------------------------------

@@ -379,10 +379,12 @@ if(WIN32)
         int main()
         {
             ABI::Windows::Media::ISystemMediaTransportControls *controls = nullptr;
+            ABI::Windows::Media::ISystemMediaTransportControls2 *controls2 = nullptr;
+            ABI::Windows::Media::ISystemMediaTransportControlsTimelineProperties *timeline = nullptr;
             ABI::Windows::Media::IMusicDisplayProperties2 *music = nullptr;
             ISystemMediaTransportControlsInterop *interop = nullptr;
             Handler *handler = nullptr;
-            return __uuidof(Handler).Data1 != 0 && !controls && !music && !interop && !handler ? 0 : 1;
+            return __uuidof(Handler).Data1 != 0 && !controls && !controls2 && !timeline && !music && !interop && !handler ? 0 : 1;
         }
     ]=] SWIFTIFY_HAVE_SMTC)
     unset(CMAKE_REQUIRED_LIBRARIES)

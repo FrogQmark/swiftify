@@ -57,6 +57,7 @@ private:
     void initializeMediaControls();
     void updateMediaControls();
     void updateMediaMetadata();
+    void updateMediaTimeline();
 
     PlaybackController *m_player;
     Theme *m_theme;
