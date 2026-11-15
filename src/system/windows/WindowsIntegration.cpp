@@ -191,11 +191,13 @@ struct WindowsIntegration::Native {
         if (message == WM_THEMECHANGED || message == WM_DWMCOMPOSITIONCHANGED || message == WM_STYLECHANGED) {
             QTimer::singleShot(0, integration, &WindowsIntegration::styleWindow);
         }
-        if (integration->m_window && !(GetWindowLongPtrW(window, GWL_STYLE) & WS_CAPTION)) {
+        const bool customFrame = integration->m_window
+            && integration->m_window->flags().testFlag(Qt::FramelessWindowHint)
+            && integration->m_window->visibility() != QWindow::FullScreen;
+        if (customFrame) {
             if (message == WM_NCCALCSIZE) {
-                if (IsZoomed(window)) {
-                    auto *bounds = wParam ? &reinterpret_cast<NCCALCSIZE_PARAMS *>(lParam)->rgrc[0]
-                                         : reinterpret_cast<RECT *>(lParam);
+                if (wParam && IsZoomed(window)) {
+                    auto *bounds = &reinterpret_cast<NCCALCSIZE_PARAMS *>(lParam)->rgrc[0];
                     MONITORINFO monitor {sizeof(MONITORINFO)};
                     if (GetMonitorInfoW(MonitorFromRect(bounds, MONITOR_DEFAULTTONEAREST), &monitor)) {
                         *bounds = monitor.rcWork;
@@ -203,7 +205,10 @@ struct WindowsIntegration::Native {
                 }
                 return 0;
             }
-            if (message == WM_NCHITTEST && !IsZoomed(window) && integration->m_window->visibility() != QWindow::FullScreen) {
+            if (message == WM_NCHITTEST) {
+                if (IsZoomed(window)) {
+                    return HTCLIENT;
+                }
                 RECT bounds {};
                 if (GetWindowRect(window, &bounds)) {
                     using WindowDpi = UINT (WINAPI *)(HWND);
@@ -211,15 +216,18 @@ struct WindowsIntegration::Native {
                     static const auto windowDpi = reinterpret_cast<WindowDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
                     static const auto metricsForDpi = reinterpret_cast<MetricsForDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
                     const UINT dpi = windowDpi ? windowDpi(window) : qRound(96 * integration->m_window->devicePixelRatio());
-                    const int border = metricsForDpi
+                    const int borderX = metricsForDpi
                         ? metricsForDpi(SM_CXSIZEFRAME, dpi) + metricsForDpi(SM_CXPADDEDBORDER, dpi)
                         : GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+                    const int borderY = metricsForDpi
+                        ? metricsForDpi(SM_CYSIZEFRAME, dpi) + metricsForDpi(SM_CXPADDEDBORDER, dpi)
+                        : GetSystemMetrics(SM_CYSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
                     const int horizontal = GET_X_LPARAM(lParam);
                     const int vertical = GET_Y_LPARAM(lParam);
-                    const bool left = horizontal >= bounds.left && horizontal < bounds.left + border;
-                    const bool right = horizontal < bounds.right && horizontal >= bounds.right - border;
-                    const bool top = vertical >= bounds.top && vertical < bounds.top + border;
-                    const bool bottom = vertical < bounds.bottom && vertical >= bounds.bottom - border;
+                    const bool left = horizontal >= bounds.left && horizontal < bounds.left + borderX;
+                    const bool right = horizontal < bounds.right && horizontal >= bounds.right - borderX;
+                    const bool top = vertical >= bounds.top && vertical < bounds.top + borderY;
+                    const bool bottom = vertical < bounds.bottom && vertical >= bounds.bottom - borderY;
                     if (top && left) return HTTOPLEFT;
                     if (top && right) return HTTOPRIGHT;
                     if (bottom && left) return HTBOTTOMLEFT;
@@ -228,6 +236,10 @@ struct WindowsIntegration::Native {
                     if (right) return HTRIGHT;
                     if (top) return HTTOP;
                     if (bottom) return HTBOTTOM;
+                    if (horizontal >= bounds.left && horizontal < bounds.right
+                        && vertical >= bounds.top && vertical < bounds.bottom) {
+                        return HTCLIENT;
+                    }
                 }
             }
         }
@@ -395,14 +407,17 @@ void WindowsIntegration::styleWindow()
     if (!m_window || !m_native || !m_window->handle()) return;
     attachWindow();
     const HWND handle = reinterpret_cast<HWND>(m_window->winId());
-    if (m_window->flags().testFlag(Qt::FramelessWindowHint) && m_window->visibility() != QWindow::FullScreen) {
+    const bool customFrame = m_window->flags().testFlag(Qt::FramelessWindowHint) && m_window->visibility() != QWindow::FullScreen;
+    if (customFrame) {
         const LONG_PTR current = GetWindowLongPtrW(handle, GWL_STYLE);
-        const LONG_PTR desired = (current | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU) & ~WS_CAPTION;
+        const LONG_PTR desired = current | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
         if (current != desired) {
             SetWindowLongPtrW(handle, GWL_STYLE, desired);
             SetWindowPos(handle, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
     }
+    const MARGINS margins = customFrame ? MARGINS{0, 0, 0, 1} : MARGINS{0, 0, 0, 0};
+    DwmExtendFrameIntoClientArea(handle, &margins);
     const auto *quick = qobject_cast<QQuickWindow *>(m_window.data());
     const QColor background = quick ? quick->color() : m_theme->colors()->layer0();
     const BOOL dark = background.lightnessF() < 0.5;
