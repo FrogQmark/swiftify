@@ -32,6 +32,12 @@ Item {
     property MaterialScheme scheme: Appearance.colors
     readonly property bool hasNextSong: Player.hasSong && Player.upNext.count > 0
     readonly property song nextSong: Player.upNext.at(Player.upNext.count > 0 ? 0 : -1)
+    readonly property bool hasPreviousSong: Player.hasSong && Player.previouslyPlayed.count > 0
+    readonly property song previousSong: Player.previouslyPlayed.at(Player.previouslyPlayed.count - 1)
+    readonly property real bottomButtonsHeight: (nextButton.visible ? nextButton.height + 10 : 0)
+                                              + (prevButton.visible ? prevButton.height + (nextButton.visible ? 8 : 10) : 0)
+                                              + 18
+    clip: true
 
     StyledText {
         id: header
@@ -193,14 +199,14 @@ Item {
 
     Rectangle {
         id: lyricsContainer
+        readonly property real minLyricsHeight: 280
         anchors.top: Player.hasSong ? artworkStage.top : header.bottom
         anchors.topMargin: Player.hasSong ? artwork.height + 20 : 12
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: nextButton.visible ? nextButton.top : parent.bottom
         anchors.leftMargin: 18
         anchors.rightMargin: 18
-        anchors.bottomMargin: nextButton.visible ? 10 : 18
+        height: Math.max(minLyricsHeight, root.height - y - root.bottomButtonsHeight)
         radius: Appearance.rounding.normal
         color: root.scheme.layer2
         clip: true
@@ -420,12 +426,12 @@ Item {
         ]
         property string badgeShape: "cookie9"
 
+        anchors.top: lyricsContainer.bottom
+        anchors.topMargin: 10
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
         anchors.leftMargin: 18
         anchors.rightMargin: 18
-        anchors.bottomMargin: 18
         height: 54
         visible: root.hasNextSong
         enabled: Player.canSkipForward
@@ -518,7 +524,7 @@ Item {
                 parentClipRadius: Appearance.rounding.normal
                 shape: nextButton.badgeShape
                 morphTo: "circle"
-                color: root.scheme.primaryContainer
+                color: root.scheme.layer4Active
                 opacity: 0
                 visible: opacity > 0.005
             }
@@ -576,7 +582,7 @@ Item {
                     anchors.fill: parent
                     shape: nextButton.badgeShape
                     spinAngle: badgeDrift.value
-                    color: root.scheme.primaryContainer
+                    color: root.scheme.layer4Active
                     scale: nextButton.hovered && !burstAnim.running ? 1 : 0
                     opacity: nextButton.hovered && !burstAnim.running ? 1 : 0
 
@@ -591,7 +597,7 @@ Item {
                     Drift {
                         id: badgeDrift
                         active: nextButton.hovered && nextButton.visible && !Settings.noShapes
-                        speed: 40
+                        speed: -40
                         period: 360
                     }
                 }
@@ -600,7 +606,7 @@ Item {
                     anchors.centerIn: parent
                     text: "skip_next"
                     iconSize: 20
-                    color: nextButton.hovered && !burstAnim.running ? root.scheme.onPrimaryContainer : root.scheme.onSurfaceVariant
+                    color: nextButton.hovered && !burstAnim.running ? root.scheme.onSurface : root.scheme.onSurfaceVariant
 
                     Behavior on color {
                         ElementMoveFastColor {}
@@ -611,6 +617,78 @@ Item {
 
         HoverHandler {
             cursorShape: nextButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        }
+    }
+
+    T.AbstractButton {
+        id: prevButton
+
+        anchors.top: nextButton.visible ? nextButton.bottom : lyricsContainer.bottom
+        anchors.topMargin: nextButton.visible ? 8 : 10
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        height: 30
+        visible: root.hasPreviousSong
+        enabled: Player.canSkipBackward
+        padding: 0
+        hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        scale: down ? 0.97 : (hovered ? 1.01 : 1)
+
+        Behavior on scale {
+            enabled: !Appearance.performanceMode
+            Bounce {}
+        }
+
+        onClicked: Player.skipToPreviousSong()
+
+        background: Rectangle {
+            radius: Appearance.rounding.small
+            color: prevButton.down ? root.scheme.layer2Active : (prevButton.hovered ? root.scheme.surfaceContainerHighest : root.scheme.layer2)
+
+            Behavior on color {
+                ElementMoveFastColor {}
+            }
+        }
+
+        contentItem: Item {
+            anchors.fill: parent
+
+            MaterialSymbol {
+                id: prevIcon
+                anchors.left: parent.left
+                anchors.leftMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                text: "skip_previous"
+                iconSize: 16
+                color: prevButton.hovered ? root.scheme.onSurface : root.scheme.onSurfaceVariant
+
+                Behavior on color {
+                    ElementMoveFastColor {}
+                }
+            }
+
+            StyledText {
+                anchors.left: prevIcon.right
+                anchors.leftMargin: 6
+                anchors.right: parent.right
+                anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.previousSong.artists.length > 0 ? root.previousSong.name + " - " + root.previousSong.artists : root.previousSong.name
+                elide: Text.ElideRight
+                font.pixelSize: Appearance.fontSize.smaller
+                color: prevButton.hovered ? root.scheme.onSurface : root.scheme.onSurfaceVariant
+
+                Behavior on color {
+                    ElementMoveFastColor {}
+                }
+            }
+        }
+
+        HoverHandler {
+            cursorShape: prevButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         }
     }
 }
