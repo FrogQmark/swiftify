@@ -47,6 +47,7 @@ LibraryStore *s_instance = nullptr;
 
 const QString kPinnedKey = QStringLiteral("pinnedPlaylistIDs");
 const QString kSearchHistoryKey = QStringLiteral("searchPlaybackHistory");
+const QString kPlaybackSourceKey = QStringLiteral("lastPlaybackSource");
 /// the saved songs' file in the song list cache: no playlist id looks like it
 const QString kSavedSongsCacheKey = QStringLiteral("saved-songs");
 const QString kCatchphrase = QStringLiteral("i mean i guess bro");
@@ -163,6 +164,7 @@ LibraryStore::LibraryStore(SpotifySession *session, Settings *settings, ErrorCen
         }
     }
     setSearchHistory(history);
+    restorePlaybackSource();
 
     connect(m_savedSongs, &SongListModel::countChanged, this, &LibraryStore::savedSongTotalChanged);
     m_session->setInitialLibraryLoader([this] { return loadInitialLibrary(); });
@@ -299,6 +301,7 @@ void LibraryStore::recordPlaybackSource(SongListModel *model, bool fromSearch)
     } else {
         m_playbackSourceKind = PlaybackSourceKind::SongAlbum;
     }
+    persistPlaybackSource();
     emit playbackSourceChanged();
 }
 
@@ -310,12 +313,14 @@ void LibraryStore::syncPlaybackSource()
             m_playbackSourcePlaylist = {};
             m_playbackSourceAlbum = {};
             m_playbackSourceArtist = {};
+            persistPlaybackSource();
         }
         emit playbackSourceChanged();
         return;
     }
 
     const Song current = m_player->currentSong();
+    const PlaybackSourceKind previousKind = m_playbackSourceKind;
     if (m_playbackSourceKind == PlaybackSourceKind::None) {
         m_playbackSourceKind = (!current.isLocalFile() && !current.albumName.isEmpty())
             ? PlaybackSourceKind::SongAlbum
@@ -324,7 +329,143 @@ void LibraryStore::syncPlaybackSource()
                && (current.isLocalFile() || current.albumName.isEmpty())) {
         m_playbackSourceKind = PlaybackSourceKind::None;
     }
+    if (m_playbackSourceKind != previousKind) {
+        persistPlaybackSource();
+    }
     emit playbackSourceChanged();
+}
+
+void LibraryStore::persistPlaybackSource() const
+{
+    if (m_playbackSourceKind == PlaybackSourceKind::None) {
+        m_settings->remove(kPlaybackSourceKey);
+        return;
+    }
+
+    QJsonObject obj;
+    switch (m_playbackSourceKind) {
+    case PlaybackSourceKind::Playlist:
+        obj.insert(QStringLiteral("kind"), QStringLiteral("playlist"));
+        obj.insert(QStringLiteral("playlist"), QJsonObject {
+            {QStringLiteral("id"), m_playbackSourcePlaylist.id},
+            {QStringLiteral("name"), m_playbackSourcePlaylist.name},
+            {QStringLiteral("description"), m_playbackSourcePlaylist.description},
+            {QStringLiteral("songCount"), m_playbackSourcePlaylist.songCount},
+            {QStringLiteral("artworkUrl"), m_playbackSourcePlaylist.artworkUrl.toString()},
+            {QStringLiteral("ownerId"), m_playbackSourcePlaylist.ownerId},
+            {QStringLiteral("ownerName"), m_playbackSourcePlaylist.ownerName},
+            {QStringLiteral("isPublic"), m_playbackSourcePlaylist.isPublic},
+            {QStringLiteral("isCollaborative"), m_playbackSourcePlaylist.isCollaborative},
+            {QStringLiteral("uri"), m_playbackSourcePlaylist.uri},
+        });
+        break;
+    case PlaybackSourceKind::Album:
+        obj.insert(QStringLiteral("kind"), QStringLiteral("album"));
+        obj.insert(QStringLiteral("album"), QJsonObject {
+            {QStringLiteral("id"), m_playbackSourceAlbum.id},
+            {QStringLiteral("name"), m_playbackSourceAlbum.name},
+            {QStringLiteral("artists"), m_playbackSourceAlbum.artists},
+            {QStringLiteral("artworkUrl"), m_playbackSourceAlbum.artworkUrl.toString()},
+            {QStringLiteral("releaseDate"), m_playbackSourceAlbum.releaseDate},
+            {QStringLiteral("songCount"), m_playbackSourceAlbum.songCount},
+            {QStringLiteral("uri"), m_playbackSourceAlbum.uri},
+        });
+        break;
+    case PlaybackSourceKind::Artist:
+        obj.insert(QStringLiteral("kind"), QStringLiteral("artist"));
+        obj.insert(QStringLiteral("artist"), m_playbackSourceArtist.toJson());
+        break;
+    case PlaybackSourceKind::SavedSongs:
+        obj.insert(QStringLiteral("kind"), QStringLiteral("savedSongs"));
+        break;
+    case PlaybackSourceKind::Search:
+        obj.insert(QStringLiteral("kind"), QStringLiteral("search"));
+        break;
+    case PlaybackSourceKind::Home:
+        obj.insert(QStringLiteral("kind"), QStringLiteral("home"));
+        break;
+    case PlaybackSourceKind::LocalTracks:
+        obj.insert(QStringLiteral("kind"), QStringLiteral("localTracks"));
+        break;
+    case PlaybackSourceKind::Stats:
+        obj.insert(QStringLiteral("kind"), QStringLiteral("stats"));
+        break;
+    case PlaybackSourceKind::SongAlbum:
+        obj.insert(QStringLiteral("kind"), QStringLiteral("songAlbum"));
+        break;
+    case PlaybackSourceKind::None:
+        return;
+    }
+
+    m_settings->setValue(kPlaybackSourceKey, QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
+void LibraryStore::restorePlaybackSource()
+{
+    const QByteArray raw = m_settings->value(kPlaybackSourceKey).toByteArray();
+    if (raw.isEmpty()) {
+        return;
+    }
+    const QJsonObject obj = QJsonDocument::fromJson(raw).object();
+    const QString kind = obj.value(QStringLiteral("kind")).toString();
+
+    m_playbackSourceKind = PlaybackSourceKind::None;
+    m_playbackSourcePlaylist = {};
+    m_playbackSourceAlbum = {};
+    m_playbackSourceArtist = {};
+
+    if (kind == QLatin1StringView("playlist")) {
+        const QJsonObject p = obj.value(QStringLiteral("playlist")).toObject();
+        Playlist playlist {
+            .id = p.value(QStringLiteral("id")).toString(),
+            .name = p.value(QStringLiteral("name")).toString(),
+            .description = p.value(QStringLiteral("description")).toString(),
+            .songCount = p.value(QStringLiteral("songCount")).toInt(),
+            .artworkUrl = QUrl(p.value(QStringLiteral("artworkUrl")).toString()),
+            .ownerId = p.value(QStringLiteral("ownerId")).toString(),
+            .ownerName = p.value(QStringLiteral("ownerName")).toString(),
+            .isPublic = p.value(QStringLiteral("isPublic")).toBool(),
+            .isCollaborative = p.value(QStringLiteral("isCollaborative")).toBool(),
+            .uri = p.value(QStringLiteral("uri")).toString(),
+        };
+        if (playlist.isValid()) {
+            m_playbackSourceKind = PlaybackSourceKind::Playlist;
+            m_playbackSourcePlaylist = playlist;
+        }
+    } else if (kind == QLatin1StringView("album")) {
+        const QJsonObject a = obj.value(QStringLiteral("album")).toObject();
+        Album album {
+            .id = a.value(QStringLiteral("id")).toString(),
+            .name = a.value(QStringLiteral("name")).toString(),
+            .artists = a.value(QStringLiteral("artists")).toString(),
+            .artworkUrl = QUrl(a.value(QStringLiteral("artworkUrl")).toString()),
+            .releaseDate = a.value(QStringLiteral("releaseDate")).toString(),
+            .songCount = a.value(QStringLiteral("songCount")).toInt(),
+            .uri = a.value(QStringLiteral("uri")).toString(),
+        };
+        if (album.isValid()) {
+            m_playbackSourceKind = PlaybackSourceKind::Album;
+            m_playbackSourceAlbum = album;
+        }
+    } else if (kind == QLatin1StringView("artist")) {
+        const Artist artist = Artist::fromJson(obj.value(QStringLiteral("artist")).toObject());
+        if (artist.isValid()) {
+            m_playbackSourceKind = PlaybackSourceKind::Artist;
+            m_playbackSourceArtist = artist;
+        }
+    } else if (kind == QLatin1StringView("savedSongs")) {
+        m_playbackSourceKind = PlaybackSourceKind::SavedSongs;
+    } else if (kind == QLatin1StringView("search")) {
+        m_playbackSourceKind = PlaybackSourceKind::Search;
+    } else if (kind == QLatin1StringView("home")) {
+        m_playbackSourceKind = PlaybackSourceKind::Home;
+    } else if (kind == QLatin1StringView("localTracks")) {
+        m_playbackSourceKind = PlaybackSourceKind::LocalTracks;
+    } else if (kind == QLatin1StringView("stats")) {
+        m_playbackSourceKind = PlaybackSourceKind::Stats;
+    } else if (kind == QLatin1StringView("songAlbum")) {
+        m_playbackSourceKind = PlaybackSourceKind::SongAlbum;
+    }
 }
 
 void LibraryStore::attachLocalFiles(LocalLibrary *localFiles)
@@ -1829,6 +1970,13 @@ QCoro::Task<> LibraryStore::refreshCover(Playlist playlist)
 
 void LibraryStore::reset()
 {
+    m_playbackSourceKind = PlaybackSourceKind::None;
+    m_playbackSourcePlaylist = {};
+    m_playbackSourceAlbum = {};
+    m_playbackSourceArtist = {};
+    persistPlaybackSource();
+    emit playbackSourceChanged();
+
     m_pendingSavedUris.clear();
     ++m_savedStatusRevision;
     m_songLoad.cancel();

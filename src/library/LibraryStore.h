@@ -328,6 +328,8 @@ private:
 
     void recordPlaybackSource(SongListModel *model, bool fromSearch);
     void syncPlaybackSource();
+    void persistPlaybackSource() const;
+    void restorePlaybackSource();
 
     void navigate(const Destination &destination);
     void cancelDetailLoads();
