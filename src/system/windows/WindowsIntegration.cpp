@@ -603,7 +603,7 @@ void WindowsIntegration::initializeMediaControls()
             TimeSpan, &IPlaybackPositionChangeRequestedEventArgs::get_RequestedPlaybackPosition>;
         ComPtr<PositionHandler> positionHandler;
         positionHandler.Attach(new PositionCallback([this](TimeSpan position) {
-            const int positionMs = int(qBound<qint64>(0, position.Duration / 10000LL, std::numeric_limits<int>::max()));
+            const int positionMs = int(qBound(qint64(0), position.Duration / 10000LL, qint64(std::numeric_limits<int>::max())));
             QMetaObject::invokeMethod(this, [this, positionMs] {
                 m_player->seek(positionMs);
             }, Qt::QueuedConnection);
@@ -688,7 +688,7 @@ void WindowsIntegration::updateMediaControls()
         m_native->controls->put_IsPreviousEnabled(m_player->canSkipBackward());
     }
     if (m_native->controls2) {
-        m_native->controls2->put_IsShuffleEnabled(m_player->isShuffleEnabled() ? TRUE : FALSE);
+        m_native->controls2->put_ShuffleEnabled(m_player->isShuffleEnabled() ? TRUE : FALSE);
         MediaPlaybackAutoRepeatMode repeatMode = MediaPlaybackAutoRepeatMode_None;
         if (m_player->repeatMode() == PlaybackController::RepeatMode::All) {
             repeatMode = MediaPlaybackAutoRepeatMode_List;
@@ -719,7 +719,7 @@ void WindowsIntegration::updateMediaTimeline()
 
     const qint64 durationTicks = m_player->hasSong() ? qMax(0, m_player->durationMs()) * 10000LL : 0;
     const qint64 positionTicks = m_player->hasSong()
-        ? qBound<qint64>(0, qint64(m_player->livePositionMs()) * 10000LL, durationTicks)
+        ? qBound(qint64(0), qint64(m_player->livePositionMs()) * 10000LL, durationTicks)
         : 0;
 
     timeline->put_StartTime(TimeSpan{0});
