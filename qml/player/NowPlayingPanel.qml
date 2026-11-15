@@ -390,8 +390,8 @@ Item {
         textFormat: Text.StyledText
         maximumLineCount: 1
         text: songData.artists.length > 0
-              ? "<b>" + root.escapeHtml(songData.name) + "</b> - " + root.escapeHtml(songData.artists)
-              : "<b>" + root.escapeHtml(songData.name) + "</b>"
+              ? "<font color=\"" + root.scheme.onSurface + "\"><b>" + root.escapeHtml(songData.name) + "</b></font> - " + root.escapeHtml(songData.artists)
+              : "<font color=\"" + root.scheme.onSurface + "\"><b>" + root.escapeHtml(songData.name) + "</b></font>"
         elide: Text.ElideRight
         font.pixelSize: Appearance.fontSize.smaller
         color: prevButton.hovered ? root.scheme.onSurface : root.scheme.onSurfaceVariant
