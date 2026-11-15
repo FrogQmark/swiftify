@@ -52,7 +52,7 @@ Row {
         shape: "cookie6"
         symbol: root.window.visibility === Window.Maximized ? "close_fullscreen" : "open_in_full"
         tooltip: root.window.visibility === Window.Maximized ? qsTr("Restore") : qsTr("Maximize")
-        onClicked: root.window.visibility === Window.Maximized ? root.window.showNormal() : root.window.showMaximized()
+        onClicked: App.toggleWindowMaximized(root.window)
     }
     ToolbarButton {
         objectName: "minimizeWindowButton"
@@ -63,6 +63,6 @@ Row {
         turnsOnHover: false
         symbol: "remove"
         tooltip: qsTr("Minimize")
-        onClicked: root.window.showMinimized()
+        onClicked: App.minimizeWindow(root.window)
     }
 }

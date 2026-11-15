@@ -40,6 +40,8 @@ public:
 
     static void initializeProcess();
     static void setNativeTitleBar(QWindow *window, bool enabled);
+    static void toggleMaximized(QWindow *window);
+    static void minimizeWindow(QWindow *window);
     void setWindow(QWindow *window);
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -57,6 +59,7 @@ private:
     void initializeMediaControls();
     void updateMediaControls();
     void updateMediaMetadata();
+    void updateMediaTimeline();
 
     PlaybackController *m_player;
     Theme *m_theme;

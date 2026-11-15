@@ -186,6 +186,29 @@ void AppController::setNativeTitleBar(QObject *target, bool enabled) const
 #endif
 }
 
+void AppController::toggleWindowMaximized(QObject *target) const
+{
+    auto *window = qobject_cast<QWindow *>(target);
+    if (!window) return;
+#ifdef Q_OS_WIN
+    WindowsIntegration::toggleMaximized(window);
+#else
+    if (window->visibility() == QWindow::Maximized) window->showNormal();
+    else window->showMaximized();
+#endif
+}
+
+void AppController::minimizeWindow(QObject *target) const
+{
+    auto *window = qobject_cast<QWindow *>(target);
+    if (!window) return;
+#ifdef Q_OS_WIN
+    WindowsIntegration::minimizeWindow(window);
+#else
+    window->showMinimized();
+#endif
+}
+
 void AppController::trimMemory()
 {
     m_trim.start();

@@ -68,7 +68,7 @@ Item {
     }
     TapHandler {
         acceptedButtons: Qt.LeftButton
-        onDoubleTapped: root.window.visibility === Window.Maximized ? root.window.showNormal() : root.window.showMaximized()
+        onDoubleTapped: App.toggleWindowMaximized(root.window)
     }
 
     Item {

@@ -307,7 +307,8 @@ private slots:
         QTRY_COMPARE(window->screen(), screen);
         HWND handle = reinterpret_cast<HWND>(window->winId());
         QTRY_VERIFY(GetWindowLongPtrW(handle, GWL_STYLE) & WS_THICKFRAME);
-        QVERIFY(!(GetWindowLongPtrW(handle, GWL_STYLE) & WS_CAPTION));
+        QVERIFY(GetWindowLongPtrW(handle, GWL_STYLE) & WS_CAPTION);
+        QVERIFY(!(GetWindowLongPtrW(handle, GWL_STYLE) & WS_POPUP));
         auto *minimize = window->findChild<QQuickItem *>(QStringLiteral("minimizeWindowButton"));
         auto *maximize = window->findChild<QQuickItem *>(QStringLiteral("maximizeWindowButton"));
         auto *close = window->findChild<QQuickItem *>(QStringLiteral("closeWindowButton"));
@@ -371,12 +372,15 @@ private slots:
         QCOMPARE(origin.y, monitor.rcWork.top);
         QCOMPARE(client.right, monitor.rcWork.right - monitor.rcWork.left);
         QCOMPARE(client.bottom, monitor.rcWork.bottom - monitor.rcWork.top);
+        QVERIFY(IsZoomed(handle));
+        QCOMPARE(SendMessageW(handle, WM_NCHITTEST, 0, MAKELPARAM(monitor.rcWork.left + 1, (monitor.rcWork.top + monitor.rcWork.bottom) / 2)), LRESULT(HTCLIENT));
+        QCOMPARE(SendMessageW(handle, WM_NCHITTEST, 0, MAKELPARAM(monitor.rcWork.right - 2, (monitor.rcWork.top + monitor.rcWork.bottom) / 2)), LRESULT(HTCLIENT));
         rig.settings.setNativeTitleBar(true);
         QTRY_VERIFY(GetWindowLongPtrW(reinterpret_cast<HWND>(window->winId()), GWL_STYLE) & WS_CAPTION);
         QCOMPARE(window->windowState(), Qt::WindowMaximized);
         verifyTitleBar(window, QStringLiteral("switched-maximized-%1").arg(screenIndex));
         rig.settings.setNativeTitleBar(false);
-        QTRY_VERIFY(!(GetWindowLongPtrW(reinterpret_cast<HWND>(window->winId()), GWL_STYLE) & WS_CAPTION));
+        QTRY_VERIFY(GetWindowLongPtrW(reinterpret_cast<HWND>(window->winId()), GWL_STYLE) & WS_CAPTION);
         QTRY_VERIFY(GetWindowLongPtrW(reinterpret_cast<HWND>(window->winId()), GWL_STYLE) & WS_THICKFRAME);
         QCOMPARE(window->windowState(), Qt::WindowMaximized);
         origin = {0, 0};
@@ -391,6 +395,10 @@ private slots:
         QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, minimize->mapToScene(QPointF(minimize->width() / 2, minimize->height() / 2)).toPoint());
         QTRY_COMPARE(window->windowState(), Qt::WindowMinimized);
         window->showNormal();
+        QTRY_COMPARE(window->windowState(), Qt::WindowNoState);
+        SendMessageW(handle, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+        QTRY_COMPARE(window->windowState(), Qt::WindowMinimized);
+        SendMessageW(handle, WM_SYSCOMMAND, SC_RESTORE, 0);
         QTRY_COMPARE(window->windowState(), Qt::WindowNoState);
         rig.playSomething();
         SendMessageW(handle, WM_COMMAND, MAKEWPARAM(2, THBN_CLICKED), 0);

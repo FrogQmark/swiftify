@@ -55,6 +55,7 @@
 #include <atomic>
 #include <cwchar>
 #include <functional>
+#include <limits>
 
 namespace swiftify {
 
@@ -75,18 +76,14 @@ COLORREF nativeColor(const QColor &color)
 }
 
 #ifdef SWIFTIFY_HAVE_SMTC
-// the media buttons' handler, written out by hand: wrl's Callback lives in
-// <wrl/event.h>, which only msvc's sdk ships, and mingw has to build this too
-using ButtonPressedHandler = ABI::Windows::Foundation::ITypedEventHandler<
-    ABI::Windows::Media::SystemMediaTransportControls *,
-    ABI::Windows::Media::SystemMediaTransportControlsButtonPressedEventArgs *>;
-
-class ButtonPressedCallback final : public ButtonPressedHandler
+// written out by hand instead of wrl's Callback (<wrl/event.h>), which only msvc ships
+template <typename Handler, typename Args, typename Value, HRESULT (STDMETHODCALLTYPE Args::*Getter)(Value *)>
+class SmtcEventCallback final : public Handler
 {
 public:
-    using Function = std::function<void(ABI::Windows::Media::SystemMediaTransportControlsButton)>;
+    using Function = std::function<void(Value)>;
 
-    explicit ButtonPressedCallback(Function function)
+    explicit SmtcEventCallback(Function function)
         : m_function(std::move(function))
     {
     }
@@ -95,8 +92,8 @@ public:
     {
         if (!object) return E_POINTER;
         if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IAgileObject)
-            || IsEqualIID(riid, __uuidof(ButtonPressedHandler))) {
-            *object = static_cast<ButtonPressedHandler *>(this);
+            || IsEqualIID(riid, __uuidof(Handler))) {
+            *object = static_cast<Handler *>(this);
             AddRef();
             return S_OK;
         }
@@ -113,12 +110,11 @@ public:
         return remaining;
     }
 
-    HRESULT STDMETHODCALLTYPE Invoke(ABI::Windows::Media::ISystemMediaTransportControls *,
-                                     ABI::Windows::Media::ISystemMediaTransportControlsButtonPressedEventArgs *args) override
+    HRESULT STDMETHODCALLTYPE Invoke(ABI::Windows::Media::ISystemMediaTransportControls *, Args *args) override
     {
-        ABI::Windows::Media::SystemMediaTransportControlsButton button;
-        if (args && SUCCEEDED(args->get_Button(&button))) {
-            m_function(button);
+        Value value {};
+        if (args && SUCCEEDED((args->*Getter)(&value))) {
+            m_function(value);
         }
         return S_OK;
     }
@@ -142,7 +138,11 @@ struct WindowsIntegration::Native {
 
 #ifdef SWIFTIFY_HAVE_SMTC
     Microsoft::WRL::ComPtr<ABI::Windows::Media::ISystemMediaTransportControls> controls;
+    Microsoft::WRL::ComPtr<ABI::Windows::Media::ISystemMediaTransportControls2> controls2;
     EventRegistrationToken buttonToken {};
+    EventRegistrationToken positionToken {};
+    EventRegistrationToken shuffleToken {};
+    EventRegistrationToken repeatToken {};
 #endif
 
     Native()
@@ -160,6 +160,21 @@ struct WindowsIntegration::Native {
     void cleanupMediaControls()
     {
 #ifdef SWIFTIFY_HAVE_SMTC
+        if (controls2) {
+            if (positionToken.value != 0) {
+                controls2->remove_PlaybackPositionChangeRequested(positionToken);
+                positionToken.value = 0;
+            }
+            if (shuffleToken.value != 0) {
+                controls2->remove_ShuffleEnabledChangeRequested(shuffleToken);
+                shuffleToken.value = 0;
+            }
+            if (repeatToken.value != 0) {
+                controls2->remove_AutoRepeatModeChangeRequested(repeatToken);
+                repeatToken.value = 0;
+            }
+            controls2.Reset();
+        }
         if (controls) {
             if (buttonToken.value != 0) {
                 controls->remove_ButtonPressed(buttonToken);
@@ -191,11 +206,13 @@ struct WindowsIntegration::Native {
         if (message == WM_THEMECHANGED || message == WM_DWMCOMPOSITIONCHANGED || message == WM_STYLECHANGED) {
             QTimer::singleShot(0, integration, &WindowsIntegration::styleWindow);
         }
-        if (integration->m_window && !(GetWindowLongPtrW(window, GWL_STYLE) & WS_CAPTION)) {
+        const bool customFrame = integration->m_window
+            && integration->m_window->flags().testFlag(Qt::FramelessWindowHint)
+            && integration->m_window->visibility() != QWindow::FullScreen;
+        if (customFrame) {
             if (message == WM_NCCALCSIZE) {
-                if (IsZoomed(window)) {
-                    auto *bounds = wParam ? &reinterpret_cast<NCCALCSIZE_PARAMS *>(lParam)->rgrc[0]
-                                         : reinterpret_cast<RECT *>(lParam);
+                if (wParam && IsZoomed(window)) {
+                    auto *bounds = &reinterpret_cast<NCCALCSIZE_PARAMS *>(lParam)->rgrc[0];
                     MONITORINFO monitor {sizeof(MONITORINFO)};
                     if (GetMonitorInfoW(MonitorFromRect(bounds, MONITOR_DEFAULTTONEAREST), &monitor)) {
                         *bounds = monitor.rcWork;
@@ -203,7 +220,10 @@ struct WindowsIntegration::Native {
                 }
                 return 0;
             }
-            if (message == WM_NCHITTEST && !IsZoomed(window) && integration->m_window->visibility() != QWindow::FullScreen) {
+            if (message == WM_NCHITTEST) {
+                if (IsZoomed(window)) {
+                    return HTCLIENT;
+                }
                 RECT bounds {};
                 if (GetWindowRect(window, &bounds)) {
                     using WindowDpi = UINT (WINAPI *)(HWND);
@@ -211,15 +231,18 @@ struct WindowsIntegration::Native {
                     static const auto windowDpi = reinterpret_cast<WindowDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
                     static const auto metricsForDpi = reinterpret_cast<MetricsForDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
                     const UINT dpi = windowDpi ? windowDpi(window) : qRound(96 * integration->m_window->devicePixelRatio());
-                    const int border = metricsForDpi
+                    const int borderX = metricsForDpi
                         ? metricsForDpi(SM_CXSIZEFRAME, dpi) + metricsForDpi(SM_CXPADDEDBORDER, dpi)
                         : GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+                    const int borderY = metricsForDpi
+                        ? metricsForDpi(SM_CYSIZEFRAME, dpi) + metricsForDpi(SM_CXPADDEDBORDER, dpi)
+                        : GetSystemMetrics(SM_CYSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
                     const int horizontal = GET_X_LPARAM(lParam);
                     const int vertical = GET_Y_LPARAM(lParam);
-                    const bool left = horizontal >= bounds.left && horizontal < bounds.left + border;
-                    const bool right = horizontal < bounds.right && horizontal >= bounds.right - border;
-                    const bool top = vertical >= bounds.top && vertical < bounds.top + border;
-                    const bool bottom = vertical < bounds.bottom && vertical >= bounds.bottom - border;
+                    const bool left = horizontal >= bounds.left && horizontal < bounds.left + borderX;
+                    const bool right = horizontal < bounds.right && horizontal >= bounds.right - borderX;
+                    const bool top = vertical >= bounds.top && vertical < bounds.top + borderY;
+                    const bool bottom = vertical < bounds.bottom && vertical >= bounds.bottom - borderY;
                     if (top && left) return HTTOPLEFT;
                     if (top && right) return HTTOPRIGHT;
                     if (bottom && left) return HTBOTTOMLEFT;
@@ -228,6 +251,10 @@ struct WindowsIntegration::Native {
                     if (right) return HTRIGHT;
                     if (top) return HTTOP;
                     if (bottom) return HTBOTTOM;
+                    if (horizontal >= bounds.left && horizontal < bounds.right
+                        && vertical >= bounds.top && vertical < bounds.bottom) {
+                        return HTCLIENT;
+                    }
                 }
             }
         }
@@ -292,6 +319,28 @@ void WindowsIntegration::setNativeTitleBar(QWindow *window, bool enabled)
     if (active && window->isVisible()) window->requestActivate();
 }
 
+void WindowsIntegration::toggleMaximized(QWindow *window)
+{
+    if (!window) return;
+    if (!window->handle() || QGuiApplication::platformName() != QLatin1StringView("windows")) {
+        if (window->visibility() == QWindow::Maximized) window->showNormal();
+        else window->showMaximized();
+        return;
+    }
+    const HWND handle = reinterpret_cast<HWND>(window->winId());
+    SendMessageW(handle, WM_SYSCOMMAND, IsZoomed(handle) ? SC_RESTORE : SC_MAXIMIZE, 0);
+}
+
+void WindowsIntegration::minimizeWindow(QWindow *window)
+{
+    if (!window) return;
+    if (!window->handle() || QGuiApplication::platformName() != QLatin1StringView("windows")) {
+        window->showMinimized();
+        return;
+    }
+    SendMessageW(reinterpret_cast<HWND>(window->winId()), WM_SYSCOMMAND, SC_MINIMIZE, 0);
+}
+
 WindowsIntegration::WindowsIntegration(PlaybackController *player, Theme *theme, QObject *parent)
     : QObject(parent), m_player(player), m_theme(theme)
 {
@@ -303,16 +352,22 @@ WindowsIntegration::WindowsIntegration(PlaybackController *player, Theme *theme,
     connect(m_theme, &Theme::schemeChanged, this, &WindowsIntegration::styleWindow);
     connect(m_player, &PlaybackController::playingChanged, this, &WindowsIntegration::updateButtons);
     connect(m_player, &PlaybackController::playingChanged, this, &WindowsIntegration::updateMediaControls);
+    connect(m_player, &PlaybackController::playingChanged, this, &WindowsIntegration::updateMediaTimeline);
     connect(m_player, &PlaybackController::queueChanged, this, &WindowsIntegration::updateButtons);
     connect(m_player, &PlaybackController::queueChanged, this, &WindowsIntegration::updateMediaControls);
     connect(m_player, &PlaybackController::currentSongChanged, this, &WindowsIntegration::updateButtons);
     connect(m_player, &PlaybackController::currentSongChanged, this, &WindowsIntegration::updateMediaControls);
     connect(m_player, &PlaybackController::currentSongChanged, this, &WindowsIntegration::updateMediaMetadata);
+    connect(m_player, &PlaybackController::currentSongChanged, this, &WindowsIntegration::updateMediaTimeline);
     connect(m_player, &PlaybackController::mediaStateChanged, this, &WindowsIntegration::updateMediaControls);
     connect(m_player, &PlaybackController::mediaStateChanged, this, &WindowsIntegration::updateMediaMetadata);
+    connect(m_player, &PlaybackController::shuffleChanged, this, &WindowsIntegration::updateMediaControls);
+    connect(m_player, &PlaybackController::repeatModeChanged, this, &WindowsIntegration::updateMediaControls);
     connect(m_player, &PlaybackController::loadingChanged, this, &WindowsIntegration::updateProgress);
     connect(m_player, &PlaybackController::livePositionChanged, this, &WindowsIntegration::updateProgress);
+    connect(m_player, &PlaybackController::positionChanged, this, &WindowsIntegration::updateMediaTimeline);
     connect(m_player, &PlaybackController::durationChanged, this, &WindowsIntegration::updateProgress);
+    connect(m_player, &PlaybackController::durationChanged, this, &WindowsIntegration::updateMediaTimeline);
 }
 
 WindowsIntegration::~WindowsIntegration()
@@ -395,14 +450,19 @@ void WindowsIntegration::styleWindow()
     if (!m_window || !m_native || !m_window->handle()) return;
     attachWindow();
     const HWND handle = reinterpret_cast<HWND>(m_window->winId());
-    if (m_window->flags().testFlag(Qt::FramelessWindowHint) && m_window->visibility() != QWindow::FullScreen) {
+    const bool customFrame = m_window->flags().testFlag(Qt::FramelessWindowHint) && m_window->visibility() != QWindow::FullScreen;
+    if (customFrame) {
         const LONG_PTR current = GetWindowLongPtrW(handle, GWL_STYLE);
-        const LONG_PTR desired = (current | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU) & ~WS_CAPTION;
+        const LONG_PTR desired = (current | WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU) & ~WS_POPUP;
         if (current != desired) {
             SetWindowLongPtrW(handle, GWL_STYLE, desired);
             SetWindowPos(handle, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
     }
+    const BOOL transitionsDisabled = FALSE;
+    DwmSetWindowAttribute(handle, DWMWA_TRANSITIONS_FORCEDISABLED, &transitionsDisabled, sizeof(transitionsDisabled));
+    const MARGINS margins = customFrame ? MARGINS{0, 0, 0, 1} : MARGINS{0, 0, 0, 0};
+    DwmExtendFrameIntoClientArea(handle, &margins);
     const auto *quick = qobject_cast<QQuickWindow *>(m_window.data());
     const QColor background = quick ? quick->color() : m_theme->colors()->layer0();
     const BOOL dark = background.lightnessF() < 0.5;
@@ -542,6 +602,11 @@ void WindowsIntegration::initializeMediaControls()
     m_native->controls->put_IsNextEnabled(true);
     m_native->controls->put_IsPreviousEnabled(true);
 
+    using ButtonPressedHandler = ITypedEventHandler<SystemMediaTransportControls *, SystemMediaTransportControlsButtonPressedEventArgs *>;
+    using ButtonPressedCallback = SmtcEventCallback<
+        ButtonPressedHandler, ISystemMediaTransportControlsButtonPressedEventArgs,
+        SystemMediaTransportControlsButton, &ISystemMediaTransportControlsButtonPressedEventArgs::get_Button>;
+
     m_native->buttonToken.value = 0;
     // the buttons are pressed on a thread of windows' own; the press is
     // queued onto this one
@@ -553,8 +618,54 @@ void WindowsIntegration::initializeMediaControls()
     }));
     m_native->controls->add_ButtonPressed(handler.Get(), &m_native->buttonToken);
 
+    if (SUCCEEDED(m_native->controls.As(&m_native->controls2)) && m_native->controls2) {
+        using PositionHandler = ITypedEventHandler<SystemMediaTransportControls *, PlaybackPositionChangeRequestedEventArgs *>;
+        using PositionCallback = SmtcEventCallback<
+            PositionHandler, IPlaybackPositionChangeRequestedEventArgs,
+            TimeSpan, &IPlaybackPositionChangeRequestedEventArgs::get_RequestedPlaybackPosition>;
+        ComPtr<PositionHandler> positionHandler;
+        positionHandler.Attach(new PositionCallback([this](TimeSpan position) {
+            const int positionMs = int(qBound(qint64(0), position.Duration / 10000LL, qint64(std::numeric_limits<int>::max())));
+            QMetaObject::invokeMethod(this, [this, positionMs] {
+                m_player->seek(positionMs);
+            }, Qt::QueuedConnection);
+        }));
+        m_native->controls2->add_PlaybackPositionChangeRequested(positionHandler.Get(), &m_native->positionToken);
+
+        using ShuffleHandler = ITypedEventHandler<SystemMediaTransportControls *, ShuffleEnabledChangeRequestedEventArgs *>;
+        using ShuffleCallback = SmtcEventCallback<
+            ShuffleHandler, IShuffleEnabledChangeRequestedEventArgs,
+            boolean, &IShuffleEnabledChangeRequestedEventArgs::get_RequestedShuffleEnabled>;
+        ComPtr<ShuffleHandler> shuffleHandler;
+        shuffleHandler.Attach(new ShuffleCallback([this](boolean enabled) {
+            const bool requested = enabled != 0;
+            QMetaObject::invokeMethod(this, [this, requested] {
+                if (requested != m_player->isShuffleEnabled()) {
+                    m_player->toggleShuffle();
+                }
+            }, Qt::QueuedConnection);
+        }));
+        m_native->controls2->add_ShuffleEnabledChangeRequested(shuffleHandler.Get(), &m_native->shuffleToken);
+
+        using RepeatHandler = ITypedEventHandler<SystemMediaTransportControls *, AutoRepeatModeChangeRequestedEventArgs *>;
+        using RepeatCallback = SmtcEventCallback<
+            RepeatHandler, IAutoRepeatModeChangeRequestedEventArgs,
+            MediaPlaybackAutoRepeatMode, &IAutoRepeatModeChangeRequestedEventArgs::get_RequestedAutoRepeatMode>;
+        ComPtr<RepeatHandler> repeatHandler;
+        repeatHandler.Attach(new RepeatCallback([this](MediaPlaybackAutoRepeatMode mode) {
+            PlaybackController::RepeatMode target = PlaybackController::RepeatMode::Off;
+            if (mode == MediaPlaybackAutoRepeatMode_List) target = PlaybackController::RepeatMode::All;
+            else if (mode == MediaPlaybackAutoRepeatMode_Track) target = PlaybackController::RepeatMode::One;
+            QMetaObject::invokeMethod(this, [this, target] {
+                m_player->setRepeatMode(target);
+            }, Qt::QueuedConnection);
+        }));
+        m_native->controls2->add_AutoRepeatModeChangeRequested(repeatHandler.Get(), &m_native->repeatToken);
+    }
+
     updateMediaMetadata();
     updateMediaControls();
+    updateMediaTimeline();
 }
 
 void WindowsIntegration::handleMediaButton(int button)
@@ -598,6 +709,48 @@ void WindowsIntegration::updateMediaControls()
         m_native->controls->put_IsNextEnabled(m_player->canSkipForward());
         m_native->controls->put_IsPreviousEnabled(m_player->canSkipBackward());
     }
+    if (m_native->controls2) {
+        m_native->controls2->put_ShuffleEnabled(m_player->isShuffleEnabled() ? TRUE : FALSE);
+        MediaPlaybackAutoRepeatMode repeatMode = MediaPlaybackAutoRepeatMode_None;
+        if (m_player->repeatMode() == PlaybackController::RepeatMode::All) {
+            repeatMode = MediaPlaybackAutoRepeatMode_List;
+        } else if (m_player->repeatMode() == PlaybackController::RepeatMode::One) {
+            repeatMode = MediaPlaybackAutoRepeatMode_Track;
+        }
+        m_native->controls2->put_AutoRepeatMode(repeatMode);
+    }
+}
+
+void WindowsIntegration::updateMediaTimeline()
+{
+    if (!m_native || !m_native->controls2) return;
+    using namespace ABI::Windows::Media;
+    using namespace ABI::Windows::Foundation;
+    using Microsoft::WRL::ComPtr;
+    using Microsoft::WRL::Wrappers::HStringReference;
+
+    HStringReference timelineClass(RuntimeClass_Windows_Media_SystemMediaTransportControlsTimelineProperties);
+    ComPtr<IInspectable> inspectable;
+    if (FAILED(RoActivateInstance(timelineClass.Get(), &inspectable)) || !inspectable) {
+        return;
+    }
+    ComPtr<ISystemMediaTransportControlsTimelineProperties> timeline;
+    if (FAILED(inspectable.As(&timeline)) || !timeline) {
+        return;
+    }
+
+    const qint64 durationTicks = m_player->hasSong() ? qMax(0, m_player->durationMs()) * 10000LL : 0;
+    const qint64 positionTicks = m_player->hasSong()
+        ? qBound(qint64(0), qint64(m_player->livePositionMs()) * 10000LL, durationTicks)
+        : 0;
+
+    timeline->put_StartTime(TimeSpan{0});
+    timeline->put_MinSeekTime(TimeSpan{0});
+    timeline->put_EndTime(TimeSpan{durationTicks});
+    timeline->put_MaxSeekTime(TimeSpan{durationTicks});
+    timeline->put_Position(TimeSpan{positionTicks});
+
+    m_native->controls2->UpdateTimelineProperties(timeline.Get());
 }
 
 void WindowsIntegration::updateMediaMetadata()
@@ -672,6 +825,7 @@ void WindowsIntegration::initializeMediaControls() {}
 void WindowsIntegration::handleMediaButton(int) {}
 void WindowsIntegration::updateMediaControls() {}
 void WindowsIntegration::updateMediaMetadata() {}
+void WindowsIntegration::updateMediaTimeline() {}
 #endif
 
 } // namespace swiftify

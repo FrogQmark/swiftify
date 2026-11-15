@@ -118,6 +118,8 @@ public:
     Q_INVOKABLE void copyToClipboard(const QString &text) const;
     Q_INVOKABLE void openUrl(const QString &url) const;
     Q_INVOKABLE void setNativeTitleBar(QObject *target, bool enabled) const;
+    Q_INVOKABLE void toggleWindowMaximized(QObject *target) const;
+    Q_INVOKABLE void minimizeWindow(QObject *target) const;
 
 signals:
     void raiseRequested();

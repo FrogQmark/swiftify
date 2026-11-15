@@ -407,7 +407,7 @@ FocusScope {
                     root.setDistractionFree(false)
                 } else {
                     const window = root.Window.window
-                    window.visibility === Window.Maximized ? window.showNormal() : window.showMaximized()
+                    App.toggleWindowMaximized(window)
                 }
             }
         }
