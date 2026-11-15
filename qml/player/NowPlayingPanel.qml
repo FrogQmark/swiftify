@@ -30,12 +30,15 @@ Item {
     /// under the immersive player: the lines change, nothing scrolls
     property bool suspended: false
     property MaterialScheme scheme: Appearance.colors
+    property bool lyricsMaximized: false
+    property real maxProgress: lyricsMaximized ? 1 : 0
+    readonly property real fadeProgress: Math.max(0, Math.min(1, maxProgress))
     readonly property bool hasNextSong: Player.hasSong && Player.upNext.count > 0
     readonly property song nextSong: Player.upNext.at(Player.upNext.count > 0 ? 0 : -1)
     readonly property bool hasPreviousSong: Player.hasSong && Player.previouslyPlayed.count > 0
     readonly property song previousSong: Player.previouslyPlayed.at(Player.previouslyPlayed.count - 1)
-    readonly property real bottomButtonsHeight: (nextButton.visible ? nextButton.height + 10 : 0)
-                                              + (prevButton.visible ? prevButton.height + (nextButton.visible ? 8 : 10) : 0)
+    readonly property real bottomButtonsHeight: (hasNextSong ? nextButton.height + 10 : 0)
+                                              + (hasPreviousSong ? prevButton.height + (hasNextSong ? 8 : 10) : 0)
                                               + 18
     readonly property real fullCoverSize: Math.max(0, Math.round(root.width - 36))
     readonly property real availableCoverHeight: root.height - 36 - 20 - lyricsContainer.minLyricsHeight - bottomButtonsHeight
@@ -44,6 +47,11 @@ Item {
                                         : (compactCover ? 96 : Math.round(Math.min(fullCoverSize, Math.max(fullCoverSize * 0.5, availableCoverHeight))))
     readonly property bool coverHovered: coverHover.hovered && !textHover.hovered && !moreButton.hovered
     clip: true
+
+    Behavior on maxProgress {
+        enabled: !Appearance.performanceMode
+        ElementMove {}
+    }
 
     T.AbstractButton {
         id: header
@@ -84,7 +92,9 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         height: topBleed + root.coverHeight + overlayBox.bleed
-        visible: Player.hasSong
+        opacity: 1 - root.fadeProgress
+        visible: Player.hasSong && opacity > 0.005
+        enabled: !root.lyricsMaximized
 
         Item {
             id: artworkContainer
@@ -293,25 +303,31 @@ Item {
     Rectangle {
         id: lyricsContainer
         readonly property real minLyricsHeight: 280
-        anchors.top: Player.hasSong ? artworkStage.top : header.bottom
-        anchors.topMargin: Player.hasSong ? artworkStage.topBleed + artwork.height + 20 : 12
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: 18
-        anchors.rightMargin: 18
-        height: Math.max(minLyricsHeight, root.height - y - root.bottomButtonsHeight)
-        radius: Appearance.rounding.normal
-        color: root.scheme.layer2
+        readonly property real normalY: Player.hasSong ? 36 + artwork.height + 20 : 38
+        readonly property real normalHeight: Math.max(minLyricsHeight, root.height - normalY - root.bottomButtonsHeight)
+        x: Math.round(18 * (1 - root.maxProgress))
+        y: Math.round(normalY + (36 - normalY) * root.maxProgress)
+        width: Math.max(0, Math.round(root.width - 36 * (1 - root.maxProgress)))
+        height: Math.max(0, Math.round(normalHeight + (root.height - 36 - normalHeight) * root.maxProgress))
+        radius: Appearance.rounding.normal * (1 - root.fadeProgress)
+        color: root.lyricsMaximized ? root.scheme.layer1 : root.scheme.layer2
         clip: true
+
+        Behavior on color {
+            ColorAnimation {
+                duration: Appearance.duration(300)
+                easing.type: Easing.OutCubic
+            }
+        }
 
         Item {
             id: lyricsHeader
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.topMargin: 10
-            anchors.leftMargin: 16
-            anchors.rightMargin: 10
+            anchors.topMargin: Math.round(10 - 6 * root.fadeProgress)
+            anchors.leftMargin: Math.round(16 + 2 * root.fadeProgress)
+            anchors.rightMargin: Math.round(10 + 4 * root.fadeProgress)
             height: maximizeLyricsButton.height
 
             StyledText {
@@ -328,10 +344,14 @@ Item {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 scheme: root.scheme
-                symbol: "open_in_full"
+                symbol: root.lyricsMaximized ? "close_fullscreen" : "open_in_full"
                 size: 30
                 iconSize: 16
-                tooltip: qsTr("Maximize lyrics")
+                tooltip: root.lyricsMaximized ? qsTr("Minimize lyrics") : qsTr("Maximize lyrics")
+                onClicked: {
+                    root.lyricsMaximized = !root.lyricsMaximized
+                    Qt.callLater(() => list.follow(true))
+                }
             }
         }
 
@@ -371,9 +391,9 @@ Item {
                 model: Player.lyrics
                 spacing: 14
                 topMargin: 18
-                bottomMargin: 22
-                leftMargin: 16
-                rightMargin: 16
+                bottomMargin: Math.round(22 + 2 * root.fadeProgress)
+                leftMargin: Math.round(16 + 8 * root.fadeProgress)
+                rightMargin: Math.round(16 + 8 * root.fadeProgress)
                 clip: true
                 boundsBehavior: Flickable.DragAndOvershootBounds
                 cacheBuffer: 2000
@@ -526,8 +546,9 @@ Item {
         anchors.leftMargin: 18
         anchors.rightMargin: 18
         height: 54
-        visible: root.hasNextSong
-        enabled: Player.canSkipForward
+        opacity: 1 - root.fadeProgress
+        visible: root.hasNextSong && opacity > 0.005
+        enabled: Player.canSkipForward && !root.lyricsMaximized
         padding: 0
         hoverEnabled: true
         focusPolicy: Qt.TabFocus
@@ -723,8 +744,9 @@ Item {
         anchors.leftMargin: 18
         anchors.rightMargin: 18
         height: 30
-        visible: root.hasPreviousSong
-        enabled: Player.canSkipBackward
+        opacity: 1 - root.fadeProgress
+        visible: root.hasPreviousSong && opacity > 0.005
+        enabled: Player.canSkipBackward && !root.lyricsMaximized
         padding: 0
         hoverEnabled: true
         focusPolicy: Qt.TabFocus
