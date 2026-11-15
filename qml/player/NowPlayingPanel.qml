@@ -45,15 +45,35 @@ Item {
     readonly property bool coverHovered: coverHover.hovered && !textHover.hovered && !moreButton.hovered
     clip: true
 
-    StyledText {
+    T.AbstractButton {
         id: header
+
         x: 18
         y: Math.round((36 - implicitHeight) / 2)
         z: 1
-        text: qsTr("Now Playing")
-        font.pixelSize: Appearance.fontSize.smallie
-        font.weight: Font.DemiBold
-        color: root.scheme.onSurfaceVariant
+        width: Math.min(implicitWidth, Math.max(0, root.width - (Settings.windowControlsOnRight ? 132 : 36)))
+        padding: 0
+        hoverEnabled: true
+        enabled: Library.hasPlaybackSource
+        focusPolicy: Qt.TabFocus
+
+        onClicked: Library.openPlaybackSource()
+
+        contentItem: StyledText {
+            text: Library.playbackSourceLabel
+            elide: Text.ElideRight
+            font.pixelSize: Appearance.fontSize.smallie
+            font.weight: Font.DemiBold
+            color: header.enabled && header.hovered ? root.scheme.onSurface : root.scheme.onSurfaceVariant
+
+            Behavior on color {
+                ElementMoveFastColor {}
+            }
+        }
+
+        HoverHandler {
+            cursorShape: header.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        }
     }
 
     Item {

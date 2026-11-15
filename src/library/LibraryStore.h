@@ -109,6 +109,9 @@ class LibraryStore : public QObject {
     /// page for each, so going back shows the page as it was left
     Q_PROPERTY(int historyDepth READ historyDepth NOTIFY destinationChanged FINAL)
 
+    Q_PROPERTY(QString playbackSourceLabel READ playbackSourceLabel NOTIFY playbackSourceChanged FINAL)
+    Q_PROPERTY(bool hasPlaybackSource READ hasPlaybackSource NOTIFY playbackSourceChanged FINAL)
+
     Q_PROPERTY(QString profileId READ profileId NOTIFY profileChanged FINAL)
     Q_PROPERTY(QString profileName READ profileName NOTIFY profileChanged FINAL)
     Q_PROPERTY(QUrl profileArtworkUrl READ profileArtworkUrl NOTIFY profileChanged FINAL)
@@ -184,6 +187,8 @@ public:
     Artist currentArtist() const { return m_destination.artist; }
     bool canGoBack() const { return !m_history.isEmpty(); }
     int historyDepth() const { return int(m_history.size()); }
+    QString playbackSourceLabel() const;
+    bool hasPlaybackSource() const;
 
     QString profileId() const { return m_profile.id; }
     QString profileName() const { return m_profile.displayName; }
@@ -258,6 +263,7 @@ public:
     Q_INVOKABLE void goToAlbum(const swiftify::Song &song);
     Q_INVOKABLE void goToArtist(const swiftify::Song &song);
     Q_INVOKABLE void goBack();
+    Q_INVOKABLE void openPlaybackSource();
 
     // --- library ---------------------------------------------------------------------
 
@@ -301,6 +307,7 @@ signals:
     void loadingChanged();
     void playlistSaveFinished(bool ok);
     void playlistDeleted(const QString &id);
+    void playbackSourceChanged();
 
 private:
     struct Destination {
@@ -317,6 +324,10 @@ private:
         QList<Song> topSongs;
         QList<Album> albums;
     };
+    enum class PlaybackSourceKind { None, Playlist, Album, Artist, SavedSongs, Search, Home, LocalTracks, Stats, SongAlbum };
+
+    void recordPlaybackSource(SongListModel *model, bool fromSearch);
+    void syncPlaybackSource();
 
     void navigate(const Destination &destination);
     void cancelDetailLoads();
@@ -365,7 +376,13 @@ private:
     SpotifySession *m_session;
     Settings *m_settings;
     ErrorCenter *m_errors;
+    PlaybackController *m_player = nullptr;
     LocalLibrary *m_localFiles = nullptr;
+
+    PlaybackSourceKind m_playbackSourceKind = PlaybackSourceKind::None;
+    Playlist m_playbackSourcePlaylist;
+    Album m_playbackSourceAlbum;
+    Artist m_playbackSourceArtist;
 
     Destination m_destination;
     QList<Destination> m_history;

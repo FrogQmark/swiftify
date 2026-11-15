@@ -227,6 +227,8 @@ signals:
     void analysisActiveChanged();
     /// a song started from search results, for the search history
     void playedFromSearch(const swiftify::Song &song);
+    /// a song started from a model (or standalone when null), for the now playing source label
+    void playbackStartedFrom(swiftify::SongListModel *model, bool fromSearch);
     /// state the system media session reflects changed
     void mediaStateChanged();
 

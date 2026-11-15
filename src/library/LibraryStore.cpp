@@ -192,7 +192,139 @@ LibraryStore *LibraryStore::create(QQmlEngine *, QJSEngine *)
 
 void LibraryStore::attachPlayer(PlaybackController *player)
 {
+    m_player = player;
     connect(player, &PlaybackController::playedFromSearch, this, &LibraryStore::recordSearchPlayback);
+    connect(player, &PlaybackController::playbackStartedFrom, this, &LibraryStore::recordPlaybackSource);
+    connect(player, &PlaybackController::currentSongChanged, this, &LibraryStore::syncPlaybackSource);
+    syncPlaybackSource();
+}
+
+QString LibraryStore::playbackSourceLabel() const
+{
+    switch (m_playbackSourceKind) {
+    case PlaybackSourceKind::Playlist:
+        return m_playbackSourcePlaylist.name.isEmpty() ? tr("Playlist") : m_playbackSourcePlaylist.name;
+    case PlaybackSourceKind::Album:
+        return m_playbackSourceAlbum.name.isEmpty() ? tr("Album") : m_playbackSourceAlbum.name;
+    case PlaybackSourceKind::Artist:
+        return m_playbackSourceArtist.name.isEmpty() ? tr("Artist") : m_playbackSourceArtist.name;
+    case PlaybackSourceKind::SavedSongs:
+        return tr("Saved Songs");
+    case PlaybackSourceKind::Search:
+        return tr("Search");
+    case PlaybackSourceKind::Home:
+        return tr("Recently Played");
+    case PlaybackSourceKind::LocalTracks:
+        return tr("Local Tracks");
+    case PlaybackSourceKind::Stats:
+        return tr("Stats");
+    case PlaybackSourceKind::SongAlbum:
+        if (m_player && m_player->hasSong() && !m_player->currentSong().albumName.isEmpty()) {
+            return m_player->currentSong().albumName;
+        }
+        return tr("Now Playing");
+    case PlaybackSourceKind::None:
+        return tr("Now Playing");
+    }
+    return tr("Now Playing");
+}
+
+bool LibraryStore::hasPlaybackSource() const
+{
+    return m_playbackSourceKind != PlaybackSourceKind::None;
+}
+
+void LibraryStore::openPlaybackSource()
+{
+    switch (m_playbackSourceKind) {
+    case PlaybackSourceKind::Playlist:
+        selectPlaylist(m_playbackSourcePlaylist);
+        break;
+    case PlaybackSourceKind::Album:
+        selectAlbum(m_playbackSourceAlbum);
+        break;
+    case PlaybackSourceKind::Artist:
+        selectArtist(m_playbackSourceArtist);
+        break;
+    case PlaybackSourceKind::SavedSongs:
+        showSavedSongs();
+        break;
+    case PlaybackSourceKind::Search:
+        showSearch();
+        break;
+    case PlaybackSourceKind::Home:
+        showHome();
+        break;
+    case PlaybackSourceKind::LocalTracks:
+        showLocalTracks();
+        break;
+    case PlaybackSourceKind::Stats:
+        showStats();
+        break;
+    case PlaybackSourceKind::SongAlbum:
+        if (m_player && m_player->hasSong()) {
+            goToAlbum(m_player->currentSong());
+        }
+        break;
+    case PlaybackSourceKind::None:
+        break;
+    }
+}
+
+void LibraryStore::recordPlaybackSource(SongListModel *model, bool fromSearch)
+{
+    m_playbackSourcePlaylist = {};
+    m_playbackSourceAlbum = {};
+    m_playbackSourceArtist = {};
+
+    if (fromSearch || (model && (model == m_searchSongs || model == m_searchHistory || model == m_searchHistoryPreview))) {
+        m_playbackSourceKind = PlaybackSourceKind::Search;
+    } else if (model && (model == m_playlistSongs || model == m_displayedPlaylistSongs)) {
+        m_playbackSourceKind = PlaybackSourceKind::Playlist;
+        m_playbackSourcePlaylist = selectedPlaylist();
+    } else if (model && model == m_albumSongs) {
+        m_playbackSourceKind = PlaybackSourceKind::Album;
+        m_playbackSourceAlbum = currentAlbum();
+    } else if (model && model == m_artistTopSongs) {
+        m_playbackSourceKind = PlaybackSourceKind::Artist;
+        m_playbackSourceArtist = currentArtist();
+    } else if (model && model == m_savedSongs) {
+        m_playbackSourceKind = PlaybackSourceKind::SavedSongs;
+    } else if (model && model == m_recentlyPlayed) {
+        m_playbackSourceKind = PlaybackSourceKind::Home;
+    } else if (model && m_localFiles && model == m_localFiles->tracks()) {
+        m_playbackSourceKind = PlaybackSourceKind::LocalTracks;
+    } else if (model && m_destination.page == Page::Stats) {
+        m_playbackSourceKind = PlaybackSourceKind::Stats;
+    } else {
+        m_playbackSourceKind = PlaybackSourceKind::SongAlbum;
+    }
+    emit playbackSourceChanged();
+}
+
+void LibraryStore::syncPlaybackSource()
+{
+    if (!m_player || !m_player->hasSong()) {
+        if (m_playbackSourceKind != PlaybackSourceKind::None) {
+            m_playbackSourceKind = PlaybackSourceKind::None;
+            m_playbackSourcePlaylist = {};
+            m_playbackSourceAlbum = {};
+            m_playbackSourceArtist = {};
+        }
+        emit playbackSourceChanged();
+        return;
+    }
+
+    const Song current = m_player->currentSong();
+    if (m_playbackSourceKind == PlaybackSourceKind::None) {
+        m_playbackSourceKind = (!current.isLocalFile && !current.albumName.isEmpty())
+            ? PlaybackSourceKind::SongAlbum
+            : PlaybackSourceKind::None;
+    } else if (m_playbackSourceKind == PlaybackSourceKind::SongAlbum
+               && (current.isLocalFile || current.albumName.isEmpty())) {
+        m_playbackSourceKind = PlaybackSourceKind::None;
+    }
+    emit playbackSourceChanged();
 }
 
 void LibraryStore::attachLocalFiles(LocalLibrary *localFiles)

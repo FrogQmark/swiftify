@@ -511,6 +511,7 @@ void PlaybackController::syncMediaSession()
 
 void PlaybackController::play(const Song &song, const QList<Song> &queue, bool fromSearch)
 {
+    emit playbackStartedFrom(nullptr, fromSearch);
     beginPlayback(song, queue, fromSearch);
 }
 
@@ -519,6 +520,7 @@ void PlaybackController::playFromModel(SongListModel *model, int index, bool fro
     if (!model || index < 0 || index >= model->count()) {
         return;
     }
+    emit playbackStartedFrom(model, fromSearch);
     beginPlayback(model->songs().at(index), model->songs(), fromSearch);
 }
 
@@ -531,6 +533,7 @@ void PlaybackController::shufflePlay(SongListModel *model)
         m_shuffle = true;
         emit shuffleChanged();
     }
+    emit playbackStartedFrom(model, false);
     const int index = int(QRandomGenerator::global()->bounded(model->count()));
     beginPlayback(model->songs().at(index), model->songs(), false);
 }
@@ -544,11 +547,13 @@ void PlaybackController::playInOrder(SongListModel *model)
         m_shuffle = false;
         emit shuffleChanged();
     }
+    emit playbackStartedFrom(model, false);
     beginPlayback(model->songs().at(0), model->songs(), false);
 }
 
 void PlaybackController::playSong(const Song &song)
 {
+    emit playbackStartedFrom(nullptr, false);
     beginPlayback(song, {song}, false);
 }
 
