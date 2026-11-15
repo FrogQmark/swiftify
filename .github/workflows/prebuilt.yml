@@ -5,8 +5,6 @@
 name: prebuilt
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
   pull_request:
     paths:
