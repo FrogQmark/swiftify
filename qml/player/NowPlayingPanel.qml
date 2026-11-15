@@ -43,8 +43,11 @@ Item {
     readonly property real fullCoverSize: Math.max(0, Math.round(root.width - 36))
     readonly property real availableCoverHeight: root.height - 36 - 20 - lyricsContainer.minLyricsHeight - bottomButtonsHeight
     readonly property bool compactCover: Player.hasSong && fullCoverSize > 0 && availableCoverHeight < fullCoverSize * 0.5
+    property real compactProgress: compactCover ? 1 : 0
+    readonly property real compactBlend: Math.max(0, Math.min(1, compactProgress))
+    readonly property real normalCoverHeight: Math.round(Math.min(fullCoverSize, Math.max(fullCoverSize * 0.5, availableCoverHeight)))
     readonly property real coverHeight: !Player.hasSong ? 0
-                                        : (compactCover ? 96 : Math.round(Math.min(fullCoverSize, Math.max(fullCoverSize * 0.5, availableCoverHeight))))
+                                        : Math.round(normalCoverHeight + (96 - normalCoverHeight) * compactBlend)
     readonly property bool coverHovered: coverHover.hovered && !textHover.hovered && !moreButton.hovered
 
     property bool hadSong: false
@@ -207,7 +210,8 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: Appearance.sizes.artworkRadius
-            visible: !root.compactCover
+            opacity: 1 - root.compactBlend
+            visible: opacity > 0.005
             gradient: Gradient {
                 GradientStop {
                     position: Math.max(0.1, 1.0 - overlayBox.blurReach / Math.max(1, artwork.height))
@@ -227,7 +231,8 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: Appearance.sizes.artworkRadius
-            visible: root.compactCover
+            opacity: root.compactBlend
+            visible: opacity > 0.005
             color: Qt.rgba(0, 0, 0, root.coverHovered ? 0.28 : (Appearance.performanceMode ? 0.62 : 0.46))
 
             Behavior on color {
@@ -238,7 +243,8 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: Appearance.sizes.artworkRadius
-            visible: !root.compactCover
+            opacity: 1 - root.compactBlend
+            visible: opacity > 0.005
             color: Qt.rgba(0, 0, 0, root.coverHovered && Player.hasSong ? 0.25 : 0)
 
             Behavior on color {
@@ -333,6 +339,11 @@ Item {
         ElementMove {}
     }
 
+    Behavior on compactProgress {
+        enabled: !Appearance.performanceMode
+        ElementMove {}
+    }
+
     T.AbstractButton {
         id: header
 
@@ -366,7 +377,7 @@ Item {
 
     Item {
         id: artworkStage
-        readonly property real topBleed: root.compactCover ? 10 : 0
+        readonly property real topBleed: 10 * root.compactBlend
         anchors.top: parent.top
         anchors.topMargin: 36 - topBleed
         anchors.left: parent.left
@@ -423,13 +434,14 @@ Item {
 
         Item {
             id: overlayBox
-            readonly property real bleed: root.compactCover ? 16 : 24
+            readonly property real bleed: 24 - 8 * root.compactBlend
             readonly property real blurReach: Math.round(Math.min(root.coverHeight, Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 72))
+            readonly property real normalHeight: Math.round(Math.min(artworkStage.height, blurReach + bleed))
             property real targetSigma: Appearance.performanceMode ? 0 : (root.coverHovered ? 1.2 : 9.5)
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: root.compactCover ? artworkStage.height : Math.round(Math.min(artworkStage.height, blurReach + bleed))
+            height: Math.round(normalHeight + (artworkStage.height - normalHeight) * root.compactBlend)
             visible: artwork.width > 0
 
             Behavior on targetSigma {
@@ -456,7 +468,7 @@ Item {
                 property vector2d direction: Qt.vector2d(1, 0)
                 property real maxSigma: overlayBox.targetSigma
                 property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
-                property real uniformBlur: root.compactCover ? 1 : 0
+                property real uniformBlur: root.compactBlend
                 fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
             }
 
@@ -476,7 +488,7 @@ Item {
                 property vector2d direction: Qt.vector2d(0, 1)
                 property real maxSigma: overlayBox.targetSigma
                 property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
-                property real uniformBlur: root.compactCover ? 1 : 0
+                property real uniformBlur: root.compactBlend
                 fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
             }
 
@@ -499,13 +511,13 @@ Item {
 
             Item {
                 id: metadataColumn
+                readonly property real normalY: overlayBox.height - overlayBox.bleed - 12 - height
+                readonly property real compactY: artwork.y - overlayBox.y + (artwork.height - height) / 2
                 anchors.left: parent.left
                 anchors.leftMargin: 32
                 anchors.right: overlayButtons.left
                 anchors.rightMargin: 8
-                y: root.compactCover
-                   ? Math.round(artwork.y - overlayBox.y + (artwork.height - height) / 2)
-                   : Math.round(overlayBox.height - overlayBox.bleed - 12 - height)
+                y: Math.round(normalY + (compactY - normalY) * root.compactBlend)
                 height: incomingMetadata.implicitHeight
                 implicitHeight: incomingMetadata.implicitHeight
                 clip: true
@@ -560,14 +572,14 @@ Item {
         }
 
         MaterialSymbol {
-            x: root.compactCover
-               ? artwork.x + artwork.width - width - 10
-               : Math.round(artwork.x + (artwork.width - width) / 2)
-            y: root.compactCover
-               ? artwork.y + 8
-               : Math.round(artwork.y + (artwork.height - height) / 2)
+            readonly property real normalX: artwork.x + (artwork.width - width) / 2
+            readonly property real compactX: artwork.x + artwork.width - width - 10
+            readonly property real normalY: artwork.y + (artwork.height - height) / 2
+            readonly property real compactY: artwork.y + 8
+            x: Math.round(normalX + (compactX - normalX) * root.compactBlend)
+            y: Math.round(normalY + (compactY - normalY) * root.compactBlend)
             text: "open_in_full"
-            iconSize: root.compactCover ? 18 : 28
+            iconSize: Math.round(28 - 10 * root.compactBlend)
             weight: 600
             color: "white"
             opacity: root.coverHovered && Player.hasSong ? 1 : 0
