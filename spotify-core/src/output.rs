@@ -41,6 +41,61 @@ use rodio::{
     },
 };
 
+/// raises the calling audio callback thread's scheduling priority once per thread.
+fn raise_audio_thread_priority() {
+    thread_local! {
+        static RAISED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    if RAISED.with(|raised| raised.replace(true)) {
+        return;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        const THREAD_PRIORITY_TIME_CRITICAL: i32 = 15;
+        unsafe extern "system" {
+            fn GetCurrentThread() -> *mut std::ffi::c_void;
+            fn SetThreadPriority(thread: *mut std::ffi::c_void, priority: i32) -> i32;
+        }
+        // SAFETY: GetCurrentThread returns a pseudo-handle to the calling thread,
+        // and SetThreadPriority only adjusts the calling thread's priority.
+        unsafe {
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        const QOS_CLASS_USER_INTERACTIVE: u32 = 0x21;
+        unsafe extern "C" {
+            fn pthread_set_qos_class_self_np(qos_class: u32, relative_priority: i32) -> i32;
+        }
+        // SAFETY: changes only the calling thread's own scheduling class.
+        unsafe {
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        const SCHED_FIFO: i32 = 1;
+        #[repr(C)]
+        struct SchedParam {
+            sched_priority: i32,
+        }
+        unsafe extern "C" {
+            fn pthread_self() -> std::ffi::c_ulong;
+            fn pthread_setschedparam(
+                thread: std::ffi::c_ulong,
+                policy: i32,
+                param: *const SchedParam,
+            ) -> i32;
+        }
+        let param = SchedParam { sched_priority: 10 };
+        // SAFETY: adjusts only the calling thread's scheduling policy and priority.
+        unsafe {
+            pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+        }
+    }
+}
+
 /// a stream on the default device, stopped until it is played, that plays the
 /// interleaved stereo `fill` writes. a device not of two channels or not of
 /// floats gets the same stereo, mixed down or padded, in its own format.
@@ -48,6 +103,11 @@ pub(crate) fn open_stereo_stream<F>(fill: F) -> Option<(cpal::Stream, u32)>
 where
     F: FnMut(&mut [f32]) + Clone + Send + 'static,
 {
+    let mut fill = fill;
+    let fill = move |out: &mut [f32]| {
+        raise_audio_thread_priority();
+        fill(out);
+    };
     let device = cpal::default_host().default_output_device()?;
     let supported = device.default_output_config().ok()?;
     let config: cpal::StreamConfig = supported.config();
