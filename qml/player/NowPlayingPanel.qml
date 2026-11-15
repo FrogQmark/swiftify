@@ -41,59 +41,90 @@ Item {
     }
 
     Item {
-        id: artworkCard
+        id: artworkStage
         anchors.top: header.bottom
         anchors.topMargin: 12
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 18
-        anchors.rightMargin: 18
-        height: width
+        height: artwork.height + overlayBox.bleed
         visible: Player.hasSong
 
-        ArtworkImage {
-            id: artwork
+        Item {
+            id: artworkContainer
             anchors.fill: parent
-            radius: Appearance.sizes.artworkRadius
-            source: Player.currentSong.artworkUrl
-            crossfade: true
+
+            ArtworkImage {
+                id: artwork
+                x: 18
+                y: 0
+                width: Math.max(0, parent.width - 36)
+                height: width
+                radius: Appearance.sizes.artworkRadius
+                source: Player.currentSong.artworkUrl
+                crossfade: true
+            }
         }
 
         Item {
             id: overlayBox
+            readonly property real bleed: 18
+            readonly property real blurReach: Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 32
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: Math.min(artwork.height, Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 52)
+            height: Math.min(artworkStage.height, blurReach + bleed)
 
             ShaderEffectSource {
-                id: overlayBackdrop
+                id: stageCapture
                 anchors.fill: parent
-                sourceItem: artwork
-                sourceRect: Qt.rect(0, Math.max(0, artwork.height - overlayBox.height), artwork.width, overlayBox.height)
+                sourceItem: artworkContainer
+                sourceRect: Qt.rect(0, overlayBox.y, artworkContainer.width, overlayBox.height)
                 live: root.visible && Player.hasSong
                 hideSource: false
                 visible: false
+                smooth: true
+            }
+
+            ShaderEffect {
+                id: across
+                anchors.fill: parent
+                property variant source: stageCapture
+                property size itemSize: Qt.size(width, height)
+                property vector2d direction: Qt.vector2d(1, 0)
+                property real maxSigma: Appearance.performanceMode ? 0 : 14
+                property real maxTint: 0
+                property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
+                fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
+            }
+
+            ShaderEffectSource {
+                id: acrossTexture
+                anchors.fill: parent
+                sourceItem: across
+                hideSource: true
+                visible: false
+                smooth: true
             }
 
             ShaderEffect {
                 anchors.fill: parent
-                property variant source: overlayBackdrop
+                property variant source: acrossTexture
                 property size itemSize: Qt.size(width, height)
-                property real cornerRadius: Appearance.sizes.artworkRadius
-                property real maxBlur: Appearance.performanceMode ? 0 : 22
+                property vector2d direction: Qt.vector2d(0, 1)
+                property real maxSigma: Appearance.performanceMode ? 0 : 14
                 property real maxTint: Appearance.performanceMode ? 0.72 : 0.56
+                property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
                 fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
             }
 
             Column {
                 id: metadataColumn
                 anchors.left: parent.left
-                anchors.leftMargin: 14
+                anchors.leftMargin: 32
                 anchors.right: overlayButtons.left
                 anchors.rightMargin: 8
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 12
+                anchors.bottomMargin: overlayBox.bleed + 12
                 spacing: 2
 
                 StyledText {
@@ -116,7 +147,7 @@ Item {
             Row {
                 id: overlayButtons
                 anchors.right: parent.right
-                anchors.rightMargin: 8
+                anchors.rightMargin: 26
                 anchors.verticalCenter: metadataColumn.verticalCenter
                 spacing: 2
 
@@ -147,8 +178,8 @@ Item {
 
     Item {
         id: lyricsArea
-        anchors.top: Player.hasSong ? artworkCard.bottom : header.bottom
-        anchors.topMargin: 12
+        anchors.top: Player.hasSong ? artworkStage.top : header.bottom
+        anchors.topMargin: Player.hasSong ? artwork.height + 12 : 12
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

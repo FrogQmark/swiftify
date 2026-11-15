@@ -25,47 +25,51 @@ layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
     vec2 itemSize;
-    float cornerRadius;
-    float maxBlur;
+    vec2 direction;
+    float maxSigma;
     float maxTint;
+    float blurEndY;
 };
 
 layout(binding = 1) uniform sampler2D source;
 
-const int TAPS = 24;
-const float GOLDEN_ANGLE = 2.39996323;
+const int REACH = 20;
+
+vec4 tap(vec2 uv)
+{
+    vec2 inside = step(vec2(0.0), uv) * step(uv, vec2(1.0));
+    return texture(source, clamp(uv, vec2(0.0), vec2(1.0))) * (inside.x * inside.y);
+}
 
 void main()
 {
-    float t = clamp(qt_TexCoord0.y, 0.0, 1.0);
+    float t = clamp(qt_TexCoord0.y / max(blurEndY, 0.001), 0.0, 1.0);
     float strength = sqrt(smoothstep(0.0, 1.0, t));
-    float radius = maxBlur * strength;
+    float sigma = maxSigma * strength;
 
     vec4 color;
-    if (radius <= 0.25) {
-        color = texture(source, qt_TexCoord0);
+    if (sigma < 0.2) {
+        color = tap(qt_TexCoord0);
     } else {
-        vec2 texel = 1.0 / max(itemSize, vec2(1.0));
-        vec4 total = texture(source, qt_TexCoord0);
-        for (int i = 0; i < TAPS; i++) {
-            float r = sqrt((float(i) + 0.5) / float(TAPS)) * radius;
-            float angle = float(i) * GOLDEN_ANGLE;
-            vec2 offset = vec2(cos(angle), sin(angle)) * r * texel;
-            vec2 uv = clamp(qt_TexCoord0 + offset, vec2(0.001), vec2(0.999));
-            total += texture(source, uv);
+        vec2 texel = direction / max(itemSize, vec2(1.0));
+        float stepPx = max(1.0, sigma * 2.5 / float(REACH));
+        float spread = -0.5 / (sigma * sigma);
+
+        vec4 total = tap(qt_TexCoord0);
+        float weights = 1.0;
+        for (int i = 1; i <= REACH; i++) {
+            float d = float(i) * stepPx;
+            float w = exp(d * d * spread);
+            vec2 offset = texel * d;
+            total += w * (tap(qt_TexCoord0 + offset) + tap(qt_TexCoord0 - offset));
+            weights += 2.0 * w;
         }
-        color = total / float(TAPS + 1);
+        color = total / weights;
     }
 
-    float tint = maxTint * strength;
-    vec3 rgb = mix(color.rgb, vec3(0.0), tint);
+    if (maxTint > 0.0) {
+        color.rgb *= 1.0 - maxTint * strength;
+    }
 
-    vec2 p = qt_TexCoord0 * itemSize;
-    vec2 corner = vec2(
-        p.x < cornerRadius ? cornerRadius - p.x : (p.x > itemSize.x - cornerRadius ? p.x - (itemSize.x - cornerRadius) : 0.0),
-        max(0.0, p.y - (itemSize.y - cornerRadius))
-    );
-    float alpha = 1.0 - smoothstep(cornerRadius - 0.75, cornerRadius + 0.75, length(corner));
-
-    fragColor = vec4(rgb * alpha, alpha) * qt_Opacity;
+    fragColor = color * qt_Opacity;
 }
