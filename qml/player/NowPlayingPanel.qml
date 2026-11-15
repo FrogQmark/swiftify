@@ -46,10 +46,286 @@ Item {
     readonly property real coverHeight: !Player.hasSong ? 0
                                         : (compactCover ? 96 : Math.round(Math.min(fullCoverSize, Math.max(fullCoverSize * 0.5, availableCoverHeight))))
     readonly property bool coverHovered: coverHover.hovered && !textHover.hovered && !moreButton.hovered
+
+    property bool hadSong: false
+    property int slideDir: 1
+    property song shownSong
+    property song outgoingSong
+    property song shownNextSong
+    property song outgoingNextSong
+    property song shownPrevSong
+    property song outgoingPrevSong
+    property real coverProgress: 1
+    property real nextProgress: 1
+    property real prevProgress: 1
     clip: true
 
     function escapeHtml(value: string): string {
         return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    }
+
+    function snapDisplayedSongs(): void {
+        coverSlideAnim.stop()
+        nextSlideAnim.stop()
+        prevSlideAnim.stop()
+        shownSong = Player.currentSong
+        shownNextSong = nextSong
+        shownPrevSong = previousSong
+        outgoingSong = Player.currentSong
+        outgoingNextSong = nextSong
+        outgoingPrevSong = previousSong
+        coverProgress = 1
+        nextProgress = 1
+        prevProgress = 1
+    }
+
+    Component.onCompleted: {
+        hadSong = Player.hasSong
+        snapDisplayedSongs()
+    }
+
+    onNextSongChanged: {
+        if (!Player.hasSong || shownSong.instanceId !== Player.currentSong.instanceId) {
+            return
+        }
+        if (nextSlideAnim.running) {
+            shownNextSong = nextSong
+        } else {
+            shownNextSong = nextSong
+            outgoingNextSong = nextSong
+        }
+    }
+
+    onPreviousSongChanged: {
+        if (!Player.hasSong || shownSong.instanceId !== Player.currentSong.instanceId) {
+            return
+        }
+        if (prevSlideAnim.running) {
+            shownPrevSong = previousSong
+        } else {
+            shownPrevSong = previousSong
+            outgoingPrevSong = previousSong
+        }
+    }
+
+    Connections {
+        target: Player
+        function onCurrentSongChanged(): void {
+            const nowHasSong = Player.hasSong
+            const incoming = Player.currentSong
+            if (!nowHasSong || !root.hadSong || root.shownSong.instanceId === ""
+                    || incoming.instanceId === root.shownSong.instanceId
+                    || Appearance.performanceMode || Appearance.reduceMotion) {
+                root.hadSong = nowHasSong
+                root.snapDisplayedSongs()
+                return
+            }
+
+            const prev = root.shownPrevSong
+            const isPrev = prev.instanceId !== ""
+                           && (incoming.instanceId === prev.instanceId
+                               || (prev.uri !== "" && incoming.uri === prev.uri && incoming.uri !== root.shownSong.uri))
+            root.slideDir = isPrev ? -1 : 1
+            root.outgoingSong = root.shownSong
+            root.shownSong = incoming
+            root.outgoingNextSong = root.shownNextSong
+            root.shownNextSong = root.nextSong
+            root.outgoingPrevSong = root.shownPrevSong
+            root.shownPrevSong = root.previousSong
+            root.hadSong = true
+
+            root.coverProgress = 0
+            coverSlideAnim.restart()
+
+            if (root.outgoingNextSong.instanceId !== root.shownNextSong.instanceId) {
+                root.nextProgress = 0
+                nextSlideAnim.restart()
+            } else {
+                nextSlideAnim.stop()
+                root.nextProgress = 1
+            }
+
+            if (root.outgoingPrevSong.instanceId !== root.shownPrevSong.instanceId) {
+                root.prevProgress = 0
+                prevSlideAnim.restart()
+            } else {
+                prevSlideAnim.stop()
+                root.prevProgress = 1
+            }
+        }
+    }
+
+    NumberAnimation {
+        id: coverSlideAnim
+        target: root
+        property: "coverProgress"
+        from: 0
+        to: 1
+        duration: Appearance.motion(450)
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: Appearance.curves.expressiveDefaultSpatial
+    }
+
+    SequentialAnimation {
+        id: nextSlideAnim
+        PauseAnimation { duration: Appearance.duration(50) }
+        NumberAnimation {
+            target: root
+            property: "nextProgress"
+            from: 0
+            to: 1
+            duration: Appearance.motion(450)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.curves.expressiveDefaultSpatial
+        }
+    }
+
+    SequentialAnimation {
+        id: prevSlideAnim
+        PauseAnimation { duration: Appearance.duration(100) }
+        NumberAnimation {
+            target: root
+            property: "prevProgress"
+            from: 0
+            to: 1
+            duration: Appearance.motion(450)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.curves.expressiveDefaultSpatial
+        }
+    }
+
+    component CoverSlide: Item {
+        required property song songData
+
+        ArtworkImage {
+            anchors.fill: parent
+            radius: Appearance.sizes.artworkRadius
+            source: parent.songData.artworkUrl
+            crossfade: false
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Appearance.sizes.artworkRadius
+            visible: !root.compactCover
+            gradient: Gradient {
+                GradientStop {
+                    position: Math.max(0.1, 1.0 - overlayBox.blurReach / Math.max(1, artwork.height))
+                    color: "transparent"
+                }
+                GradientStop {
+                    position: Math.max(0.2, 1.0 - (overlayBox.blurReach * 0.5) / Math.max(1, artwork.height))
+                    color: Qt.rgba(0, 0, 0, 0.28)
+                }
+                GradientStop {
+                    position: 1.0
+                    color: Qt.rgba(0, 0, 0, Appearance.performanceMode ? 0.68 : 0.52)
+                }
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Appearance.sizes.artworkRadius
+            visible: root.compactCover
+            color: Qt.rgba(0, 0, 0, root.coverHovered ? 0.28 : (Appearance.performanceMode ? 0.62 : 0.46))
+
+            Behavior on color {
+                ElementMoveFastColor {}
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Appearance.sizes.artworkRadius
+            visible: !root.compactCover
+            color: Qt.rgba(0, 0, 0, root.coverHovered && Player.hasSong ? 0.25 : 0)
+
+            Behavior on color {
+                ColorAnimation { duration: Appearance.duration(160) }
+            }
+        }
+    }
+
+    component MetadataSlide: Column {
+        required property song songData
+        readonly property real maxLineWidth: Math.max(titleText.implicitWidth, artistText.implicitWidth)
+        spacing: 2
+
+        StyledText {
+            id: titleText
+            width: parent.width
+            text: parent.songData.name
+            elide: Text.ElideRight
+            font.pixelSize: Appearance.fontSize.normal
+            font.weight: Font.Bold
+            color: "white"
+        }
+        StyledText {
+            id: artistText
+            width: parent.width
+            text: parent.songData.artists
+            elide: Text.ElideRight
+            font.pixelSize: Appearance.fontSize.smallie
+            color: Qt.rgba(1, 1, 1, 0.82)
+        }
+    }
+
+    component NextInfoSlide: Item {
+        id: nextSlideRoot
+        required property song songData
+
+        ArtworkImage {
+            id: nextArt
+            x: 8
+            anchors.verticalCenter: parent.verticalCenter
+            width: 38
+            height: 38
+            radius: Appearance.sizes.smallArtworkRadius
+            source: nextSlideRoot.songData.artworkUrl
+            crossfade: false
+        }
+
+        Column {
+            anchors.left: nextArt.right
+            anchors.leftMargin: 10
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 1
+
+            StyledText {
+                width: parent.width
+                text: nextSlideRoot.songData.name
+                elide: Text.ElideRight
+                font.pixelSize: Appearance.fontSize.smallie
+                font.weight: Font.DemiBold
+                color: root.scheme.onSurface
+            }
+            StyledText {
+                width: parent.width
+                text: nextSlideRoot.songData.artists
+                elide: Text.ElideRight
+                font.pixelSize: Appearance.fontSize.smaller
+                color: root.scheme.onSurfaceVariant
+            }
+        }
+    }
+
+    component PrevInfoSlide: StyledText {
+        required property song songData
+        textFormat: Text.StyledText
+        maximumLineCount: 1
+        text: songData.artists.length > 0
+              ? "<b>" + root.escapeHtml(songData.name) + "</b> - " + root.escapeHtml(songData.artists)
+              : "<b>" + root.escapeHtml(songData.name) + "</b>"
+        elide: Text.ElideRight
+        font.pixelSize: Appearance.fontSize.smaller
+        color: prevButton.hovered ? root.scheme.onSurface : root.scheme.onSurfaceVariant
+
+        Behavior on color {
+            ElementMoveFastColor {}
+        }
     }
 
     Behavior on maxProgress {
@@ -115,6 +391,7 @@ Item {
                 y: artworkStage.topBleed
                 width: root.fullCoverSize
                 height: root.coverHeight
+                clip: true
                 scale: root.coverHovered ? 1.035 : 1
 
                 Behavior on scale {
@@ -125,53 +402,21 @@ Item {
                     }
                 }
 
-                ArtworkImage {
-                    anchors.fill: parent
-                    radius: Appearance.sizes.artworkRadius
-                    source: Player.currentSong.artworkUrl
-                    crossfade: true
+                CoverSlide {
+                    width: parent.width
+                    height: parent.height
+                    songData: root.outgoingSong
+                    visible: root.coverProgress < 0.999 && root.outgoingSong.instanceId !== ""
+                    x: -root.slideDir * parent.width * root.coverProgress
+                    opacity: Math.max(0, 1 - root.coverProgress * 1.4)
                 }
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Appearance.sizes.artworkRadius
-                    visible: !root.compactCover
-                    gradient: Gradient {
-                        GradientStop {
-                            position: Math.max(0.1, 1.0 - overlayBox.blurReach / Math.max(1, artwork.height))
-                            color: "transparent"
-                        }
-                        GradientStop {
-                            position: Math.max(0.2, 1.0 - (overlayBox.blurReach * 0.5) / Math.max(1, artwork.height))
-                            color: Qt.rgba(0, 0, 0, 0.28)
-                        }
-                        GradientStop {
-                            position: 1.0
-                            color: Qt.rgba(0, 0, 0, Appearance.performanceMode ? 0.68 : 0.52)
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Appearance.sizes.artworkRadius
-                    visible: root.compactCover
-                    color: Qt.rgba(0, 0, 0, root.coverHovered ? 0.28 : (Appearance.performanceMode ? 0.62 : 0.46))
-
-                    Behavior on color {
-                        ElementMoveFastColor {}
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Appearance.sizes.artworkRadius
-                    visible: !root.compactCover
-                    color: Qt.rgba(0, 0, 0, root.coverHovered && Player.hasSong ? 0.25 : 0)
-
-                    Behavior on color {
-                        ColorAnimation { duration: Appearance.duration(160) }
-                    }
+                CoverSlide {
+                    width: parent.width
+                    height: parent.height
+                    songData: root.shownSong
+                    x: root.slideDir * parent.width * (1 - root.coverProgress)
+                    opacity: Math.min(1, root.coverProgress * 2.2)
                 }
             }
         }
@@ -252,41 +497,41 @@ Item {
                 }
             }
 
-            Column {
+            Item {
                 id: metadataColumn
                 anchors.left: parent.left
                 anchors.leftMargin: 32
                 anchors.right: overlayButtons.left
                 anchors.rightMargin: 8
                 y: root.compactCover
-                   ? Math.round(artwork.y - overlayBox.y + (artwork.height - implicitHeight) / 2)
-                   : Math.round(overlayBox.height - overlayBox.bleed - 12 - implicitHeight)
-                spacing: 2
+                   ? Math.round(artwork.y - overlayBox.y + (artwork.height - height) / 2)
+                   : Math.round(overlayBox.height - overlayBox.bleed - 12 - height)
+                height: incomingMetadata.implicitHeight
+                implicitHeight: incomingMetadata.implicitHeight
+                clip: true
 
-                StyledText {
-                    id: titleText
+                MetadataSlide {
                     width: parent.width
-                    text: Player.currentSong.name
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.fontSize.normal
-                    font.weight: Font.Bold
-                    color: "white"
+                    songData: root.outgoingSong
+                    visible: root.coverProgress < 0.999 && root.outgoingSong.instanceId !== ""
+                    x: -root.slideDir * parent.width * root.coverProgress
+                    opacity: Math.max(0, 1 - root.coverProgress * 1.4)
                 }
-                StyledText {
-                    id: artistText
+
+                MetadataSlide {
+                    id: incomingMetadata
                     width: parent.width
-                    text: Player.currentSong.artists
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.fontSize.smallie
-                    color: Qt.rgba(1, 1, 1, 0.82)
+                    songData: root.shownSong
+                    x: root.slideDir * parent.width * (1 - root.coverProgress)
+                    opacity: Math.min(1, root.coverProgress * 2.2)
                 }
             }
 
             Item {
                 x: metadataColumn.x
                 y: metadataColumn.y
-                width: Math.min(metadataColumn.width, Math.max(titleText.implicitWidth, artistText.implicitWidth))
-                height: metadataColumn.implicitHeight
+                width: Math.min(metadataColumn.width, incomingMetadata.maxLineWidth)
+                height: metadataColumn.height
 
                 HoverHandler {
                     id: textHover
@@ -693,39 +938,28 @@ Item {
         contentItem: Item {
             anchors.fill: parent
 
-            ArtworkImage {
-                id: nextArt
-                x: 8
-                anchors.verticalCenter: parent.verticalCenter
-                width: 38
-                height: 38
-                radius: Appearance.sizes.smallArtworkRadius
-                source: root.nextSong.artworkUrl
-                crossfade: true
-            }
-
-            Column {
-                anchors.left: nextArt.right
-                anchors.leftMargin: 10
+            Item {
+                anchors.left: parent.left
                 anchors.right: nextBadge.left
-                anchors.rightMargin: 8
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 1
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                clip: true
 
-                StyledText {
+                NextInfoSlide {
                     width: parent.width
-                    text: root.nextSong.name
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.fontSize.smallie
-                    font.weight: Font.DemiBold
-                    color: root.scheme.onSurface
+                    height: parent.height
+                    songData: root.outgoingNextSong
+                    visible: root.nextProgress < 0.999 && root.outgoingNextSong.instanceId !== ""
+                    x: -root.slideDir * parent.width * root.nextProgress
+                    opacity: Math.max(0, 1 - root.nextProgress * 1.4)
                 }
-                StyledText {
+
+                NextInfoSlide {
                     width: parent.width
-                    text: root.nextSong.artists
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.fontSize.smaller
-                    color: root.scheme.onSurfaceVariant
+                    height: parent.height
+                    songData: root.shownNextSong
+                    x: root.slideDir * parent.width * (1 - root.nextProgress)
+                    opacity: Math.min(1, root.nextProgress * 2.2)
                 }
             }
 
@@ -831,23 +1065,30 @@ Item {
                 }
             }
 
-            StyledText {
+            Item {
                 anchors.left: prevIcon.right
                 anchors.leftMargin: 6
                 anchors.right: parent.right
                 anchors.rightMargin: 10
-                anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.StyledText
-                maximumLineCount: 1
-                text: root.previousSong.artists.length > 0
-                      ? "<b>" + root.escapeHtml(root.previousSong.name) + "</b> - " + root.escapeHtml(root.previousSong.artists)
-                      : "<b>" + root.escapeHtml(root.previousSong.name) + "</b>"
-                elide: Text.ElideRight
-                font.pixelSize: Appearance.fontSize.smaller
-                color: prevButton.hovered ? root.scheme.onSurface : root.scheme.onSurfaceVariant
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                clip: true
 
-                Behavior on color {
-                    ElementMoveFastColor {}
+                PrevInfoSlide {
+                    width: parent.width
+                    anchors.verticalCenter: parent.verticalCenter
+                    songData: root.outgoingPrevSong
+                    visible: root.prevProgress < 0.999 && root.outgoingPrevSong.instanceId !== ""
+                    x: -root.slideDir * parent.width * root.prevProgress
+                    opacity: Math.max(0, 1 - root.prevProgress * 1.4)
+                }
+
+                PrevInfoSlide {
+                    width: parent.width
+                    anchors.verticalCenter: parent.verticalCenter
+                    songData: root.shownPrevSong
+                    x: root.slideDir * parent.width * (1 - root.prevProgress)
+                    opacity: Math.min(1, root.prevProgress * 2.2)
                 }
             }
         }
