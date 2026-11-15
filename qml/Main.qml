@@ -376,7 +376,7 @@ ApplicationWindow {
             anchors.right: parent.right
             anchors.rightMargin: shown ? 8 : 0
             anchors.top: parent.top
-            anchors.topMargin: 8 + (window.inAppWindowControls && Settings.windowControlsOnRight ? 36 : 0)
+            anchors.topMargin: 8
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 8
             width: shown ? Appearance.sizes.sideSheetWidth : 0
@@ -693,7 +693,7 @@ ApplicationWindow {
         id: appWindowControls
         objectName: "appWindowControls"
         x: Settings.windowControlsOnRight ? parent.width - width - 12 : 12
-        y: 8
+        y: 12
         visible: window.inAppWindowControls && window.visibility !== Window.FullScreen
         compact: true
         scheme: window.immersiveReveal > 0 ? PlayerStyle.darkScheme : Appearance.colors

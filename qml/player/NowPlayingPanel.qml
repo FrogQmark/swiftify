@@ -19,17 +19,17 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Effects
 import Swiftify
 
-// Now Playing (NowPlayingPanel): current track artwork, metadata, options menu,
-// and the lyrics column below it.
+// Now Playing (NowPlayingPanel): full-width artwork with blurred metadata
+// overlay, action buttons, and the lyrics column below it.
 Item {
     id: root
 
     /// under the immersive player: the lines change, nothing scrolls
     property bool suspended: false
     property MaterialScheme scheme: Appearance.colors
-    readonly property real artworkSize: Math.max(96, Math.min(width - 36, Math.round(height * 0.30)))
 
     StyledText {
         id: header
@@ -41,34 +41,82 @@ Item {
         color: root.scheme.onSurfaceVariant
     }
 
-    Column {
-        id: nowPlayingSection
+    Item {
+        id: artworkCard
         anchors.top: header.bottom
         anchors.topMargin: 12
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: 18
         anchors.rightMargin: 18
-        spacing: 12
+        height: width
         visible: Player.hasSong
 
         ArtworkImage {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: root.artworkSize
-            height: width
+            id: artwork
+            anchors.fill: parent
             radius: Appearance.sizes.artworkRadius
             source: Player.currentSong.artworkUrl
             crossfade: true
         }
 
         Item {
-            width: parent.width
-            height: metadataColumn.implicitHeight
+            id: overlayBox
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 20
+
+            Item {
+                id: overlayMask
+                anchors.fill: parent
+                visible: false
+                layer.enabled: true
+
+                Rectangle {
+                    anchors.fill: parent
+                    topLeftRadius: 0
+                    topRightRadius: 0
+                    bottomLeftRadius: Appearance.sizes.artworkRadius
+                    bottomRightRadius: Appearance.sizes.artworkRadius
+                }
+            }
+
+            ShaderEffectSource {
+                id: overlayBackdrop
+                anchors.fill: parent
+                sourceItem: artwork
+                sourceRect: Qt.rect(0, Math.max(0, artwork.height - overlayBox.height), artwork.width, overlayBox.height)
+                live: root.visible && Player.hasSong
+                hideSource: false
+                visible: false
+            }
+
+            MultiEffect {
+                anchors.fill: parent
+                visible: !Appearance.performanceMode
+                source: overlayBackdrop
+                blurEnabled: true
+                blur: 0.85
+                blurMax: 36
+                maskEnabled: true
+                maskSource: overlayMask
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                topLeftRadius: 0
+                topRightRadius: 0
+                bottomLeftRadius: Appearance.sizes.artworkRadius
+                bottomRightRadius: Appearance.sizes.artworkRadius
+                color: Qt.rgba(0, 0, 0, Appearance.performanceMode ? 0.72 : 0.48)
+            }
 
             Column {
                 id: metadataColumn
                 anchors.left: parent.left
-                anchors.right: moreButton.left
+                anchors.leftMargin: 14
+                anchors.right: overlayButtons.left
                 anchors.rightMargin: 8
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 2
@@ -79,76 +127,53 @@ Item {
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.fontSize.normal
                     font.weight: Font.Bold
-                    color: root.scheme.onSurface
+                    color: "white"
                 }
                 StyledText {
                     width: parent.width
                     text: Player.currentSong.artists
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.fontSize.smallie
-                    color: root.scheme.onSurfaceVariant
-                }
-                StyledText {
-                    width: parent.width
-                    visible: Player.currentSong.albumName.length > 0
-                    text: Player.currentSong.albumName
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.fontSize.smaller
-                    color: root.scheme.outline
+                    color: Qt.rgba(1, 1, 1, 0.82)
                 }
             }
 
-            IconButton {
-                id: moreButton
+            Row {
+                id: overlayButtons
                 anchors.right: parent.right
+                anchors.rightMargin: 8
                 anchors.verticalCenter: parent.verticalCenter
-                scheme: root.scheme
-                symbol: "more_horiz"
-                size: 32
-                iconSize: 18
-                enabled: Player.hasSong
-                tooltip: qsTr("More options")
-                onClicked: SongMenus.open(Player.currentSong, false)
-            }
-        }
+                spacing: 2
 
-        Rectangle {
-            width: parent.width
-            height: 1
-            color: root.scheme.outlineVariant
-            opacity: 0.35
-        }
+                IconButton {
+                    scheme: root.scheme
+                    symbol: "more_horiz"
+                    size: 32
+                    iconSize: 18
+                    iconColor: "white"
+                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.14)
+                    enabled: Player.hasSong
+                    tooltip: qsTr("More options")
+                    onClicked: SongMenus.open(Player.currentSong, false)
+                }
 
-        Item {
-            width: parent.width
-            height: maximizeLyricsButton.height
-
-            StyledText {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Lyrics")
-                font.pixelSize: Appearance.fontSize.smallie
-                font.weight: Font.DemiBold
-                color: root.scheme.onSurfaceVariant
-            }
-
-            IconButton {
-                id: maximizeLyricsButton
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                scheme: root.scheme
-                symbol: "open_in_full"
-                size: 28
-                iconSize: 16
-                tooltip: qsTr("Maximize lyrics")
+                IconButton {
+                    scheme: root.scheme
+                    symbol: "open_in_full"
+                    size: 32
+                    iconSize: 16
+                    iconColor: "white"
+                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.14)
+                    tooltip: qsTr("Maximize lyrics")
+                }
             }
         }
     }
 
     Item {
         id: lyricsArea
-        anchors.top: Player.hasSong ? nowPlayingSection.bottom : header.bottom
-        anchors.topMargin: Player.hasSong ? 6 : 12
+        anchors.top: Player.hasSong ? artworkCard.bottom : header.bottom
+        anchors.topMargin: 12
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -180,7 +205,7 @@ Item {
             Reveal.shown: !Player.loadingLyrics && Player.hasLyrics
             model: Player.lyrics
             spacing: 22
-            topMargin: 12
+            topMargin: 8
             bottomMargin: 18
             leftMargin: 18
             rightMargin: 18
