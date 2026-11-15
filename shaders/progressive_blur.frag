@@ -27,23 +27,18 @@ layout(std140, binding = 0) uniform buf {
     vec2 itemSize;
     vec2 direction;
     float maxSigma;
-    float maxTint;
     float blurEndY;
-    float sideMargin;
-    float bleed;
-    float cornerRadius;
 };
 
 layout(binding = 1) uniform sampler2D source;
 
-const int REACH = 20;
+const int REACH = 18;
 
 void main()
 {
     float t = clamp(qt_TexCoord0.y / max(blurEndY, 0.001), 0.0, 1.0);
-    float s = smoothstep(0.0, 1.0, t);
-    float blurStrength = pow(s, 0.75);
-    float sigma = maxSigma * blurStrength;
+    float strength = smoothstep(0.0, 1.0, t);
+    float sigma = maxSigma * strength;
 
     vec4 color;
     if (sigma <= 0.05) {
@@ -65,17 +60,6 @@ void main()
             weights += 2.0 * w;
         }
         color = total / weights;
-    }
-
-    if (maxTint > 0.0) {
-        vec2 p = qt_TexCoord0 * itemSize;
-        float dx = abs(p.x - itemSize.x * 0.5) - (itemSize.x * 0.5 - sideMargin - cornerRadius);
-        float dy = p.y - (itemSize.y - bleed - cornerRadius);
-        vec2 q = vec2(max(dx, 0.0), max(dy, 0.0));
-        float sdCover = length(q) + min(max(dx, dy), 0.0) - cornerRadius;
-        float tintMask = 1.0 - smoothstep(-8.0, 16.0, sdCover);
-        float tintStrength = pow(s, 0.85);
-        color.rgb *= 1.0 - maxTint * tintStrength * tintMask;
     }
 
     fragColor = color * qt_Opacity;

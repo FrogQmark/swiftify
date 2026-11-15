@@ -62,29 +62,48 @@ Item {
                 id: artwork
                 x: 18
                 y: 0
-                width: Math.max(0, parent.width - 36)
+                width: Math.max(0, Math.round(parent.width - 36))
                 height: width
                 radius: Appearance.sizes.artworkRadius
                 source: Player.currentSong.artworkUrl
                 crossfade: true
             }
+
+            Rectangle {
+                anchors.fill: artwork
+                radius: Appearance.sizes.artworkRadius
+                gradient: Gradient {
+                    GradientStop {
+                        position: Math.max(0.1, 1.0 - overlayBox.blurReach / Math.max(1, artwork.height))
+                        color: "transparent"
+                    }
+                    GradientStop {
+                        position: Math.max(0.2, 1.0 - (overlayBox.blurReach * 0.5) / Math.max(1, artwork.height))
+                        color: Qt.rgba(0, 0, 0, 0.28)
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: Qt.rgba(0, 0, 0, Appearance.performanceMode ? 0.68 : 0.52)
+                    }
+                }
+            }
         }
 
         Item {
             id: overlayBox
-            readonly property real bleed: 36
-            readonly property real blurReach: Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 40
+            readonly property real bleed: 24
+            readonly property real blurReach: Math.round(Math.max(metadataColumn.implicitHeight, overlayButtons.implicitHeight) + 72)
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: Math.min(artworkStage.height, blurReach + bleed)
+            height: Math.round(Math.min(artworkStage.height, blurReach + bleed))
             visible: artwork.width > 0
 
             ShaderEffectSource {
                 id: stageCapture
                 anchors.fill: parent
                 sourceItem: artworkContainer
-                sourceRect: Qt.rect(0, overlayBox.y, artworkContainer.width, overlayBox.height)
+                sourceRect: Qt.rect(0, Math.round(overlayBox.y), Math.round(artworkContainer.width), Math.round(overlayBox.height))
                 live: root.visible && Player.hasSong && overlayBox.width > 0
                 hideSource: false
                 visible: false
@@ -97,12 +116,8 @@ Item {
                 property variant source: stageCapture
                 property size itemSize: Qt.size(width, height)
                 property vector2d direction: Qt.vector2d(1, 0)
-                property real maxSigma: Appearance.performanceMode ? 0 : 16
-                property real maxTint: 0
+                property real maxSigma: Appearance.performanceMode ? 0 : 9.5
                 property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
-                property real sideMargin: 18
-                property real bleed: overlayBox.bleed
-                property real cornerRadius: Appearance.sizes.artworkRadius
                 fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
             }
 
@@ -120,12 +135,8 @@ Item {
                 property variant source: acrossTexture
                 property size itemSize: Qt.size(width, height)
                 property vector2d direction: Qt.vector2d(0, 1)
-                property real maxSigma: Appearance.performanceMode ? 0 : 16
-                property real maxTint: Appearance.performanceMode ? 0.72 : 0.58
+                property real maxSigma: Appearance.performanceMode ? 0 : 9.5
                 property real blurEndY: (overlayBox.height - overlayBox.bleed) / Math.max(1, overlayBox.height)
-                property real sideMargin: 18
-                property real bleed: overlayBox.bleed
-                property real cornerRadius: Appearance.sizes.artworkRadius
                 fragmentShader: "qrc:/shaders/progressive_blur.frag.qsb"
             }
 
