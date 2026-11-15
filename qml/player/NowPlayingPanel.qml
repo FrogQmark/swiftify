@@ -341,7 +341,7 @@ Item {
 
     Behavior on compactProgress {
         enabled: !Appearance.performanceMode
-        ElementMove {}
+        ElementMoveFast {}
     }
 
     T.AbstractButton {
