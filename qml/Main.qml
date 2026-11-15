@@ -42,7 +42,7 @@ ApplicationWindow {
     width: 1280
     height: 780
     minimumWidth: Math.ceil(526 * zoom)
-    minimumHeight: Math.ceil(410 * zoom)
+    minimumHeight: Math.ceil(568 * zoom)
     readonly property bool rightPanelFits: layoutWidth - effectiveSidebarWidth - Appearance.sizes.sideSheetWidth - 32 >= 404
 
     function closeCrowdedPanels() {
