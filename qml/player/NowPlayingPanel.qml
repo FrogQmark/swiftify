@@ -716,7 +716,6 @@ Item {
                 }
                 onClicked: {
                     Settings.nowPlayingLyricsExpanded = !Settings.nowPlayingLyricsExpanded
-                    Qt.callLater(() => list.follow(true))
                 }
             }
         }
@@ -764,6 +763,8 @@ Item {
                 boundsBehavior: Flickable.DragAndOvershootBounds
                 cacheBuffer: 2000
                 signal stepped(real delta)
+
+                onHeightChanged: follow(false)
 
                 layer.enabled: width > 0 && height > 0
                 layer.effect: ShaderEffect {
