@@ -54,6 +54,14 @@ jobs:
         with:
           workspaces: spotify-core
 
+      - name: cache rust target
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/build/*/swiftify/cargo/build
+          key: ${{ runner.os }}-corrosion-rust-${{ hashFiles('spotify-core/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-corrosion-rust-
+
       - name: setup sccache
         uses: mozilla-actions/sccache-action@v0.0.11
 
@@ -108,16 +116,10 @@ jobs:
             throw 'libraries missing from the zip'
           }
 
-      - name: package
-        shell: pwsh
-        run: >
-          Compress-Archive -Path "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}"
-          -DestinationPath "${{ steps.version.outputs.name }}.zip"
-
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows
-          path: ${{ steps.version.outputs.name }}.zip
+          name: ${{ steps.version.outputs.name }}
+          path: ${{ runner.temp }}/${{ steps.version.outputs.name }}
           if-no-files-found: error
 
   release:
@@ -130,7 +132,14 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
-          merge-multiple: true
+
+      - name: package
+        run: |
+          cd dist
+          for dir in */; do
+            zip -r "${dir%/}.zip" "$dir"
+            rm -rf "$dir"
+          done
 
       # a draft, so the notes are written and it is published by hand
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
