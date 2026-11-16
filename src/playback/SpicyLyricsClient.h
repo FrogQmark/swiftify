@@ -27,6 +27,7 @@
 #include <QStringList>
 
 #include <optional>
+#include <utility>
 
 class QNetworkAccessManager;
 
@@ -97,11 +98,19 @@ public:
                                      bool wantRomanized, bool wantTranslated, QString targetLanguage);
 
     static bool containsNonLatinLetters(const QString &text);
+    static QString romanizeOffline(const QString &text);
     static bool parseTranslateResponse(const QByteArray &json, QString *translatedOut, QString *romanizedOut);
+    static QString parseMyMemoryResponse(const QByteArray &json);
 
 private:
+    QCoro::Task<std::pair<QStringList, QStringList>> requestGoogleBatch(QStringList batch, QString targetLang,
+                                                                        bool includeRomanized);
+    QCoro::Task<QStringList> requestMyMemoryBatch(QStringList batch, QString sourceLang, QString targetLang);
+
     QNetworkAccessManager *m_network;
     SpicyLyricsCache m_cache;
+    qint64 m_googleCooldownUntilMs = 0;
+    qint64 m_myMemoryCooldownUntilMs = 0;
 };
 
 } // namespace swiftify

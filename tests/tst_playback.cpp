@@ -900,6 +900,14 @@ private slots:
         QVERIFY(SpicyLyricsClient::parseTranslateResponse(withMetadata, &metaTranslated, &metaRomanized));
         QCOMPARE(metaTranslated, QStringLiteral("Hello"));
         QVERIFY(metaRomanized.isEmpty());
+
+        QCOMPARE(SpicyLyricsClient::romanizeOffline(QStringLiteral("こんにちは")), QStringLiteral("konnichiha"));
+        QCOMPARE(SpicyLyricsClient::romanizeOffline(QStringLiteral("사랑")), QStringLiteral("sarang"));
+        QCOMPARE(SpicyLyricsClient::romanizeOffline(QStringLiteral("привет")), QStringLiteral("privet"));
+        QVERIFY(SpicyLyricsClient::romanizeOffline(QStringLiteral("夢灯籠")).isEmpty());
+
+        QCOMPARE(SpicyLyricsClient::parseMyMemoryResponse(R"({"responseData":{"translatedText":"Olá mundo"},"responseStatus":200,"quotaFinished":false})"),
+                 QStringLiteral("Olá mundo"));
     }
 
     void spicyLyricsCacheExpiresAfterThirtyDays()
