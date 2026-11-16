@@ -799,7 +799,8 @@ private slots:
                                 { "Text": "Hel", "StartTime": 6.0, "EndTime": 6.4, "IsPartOfWord": true, "TransliteratedText": "hel" },
                                 { "Text": "lo", "StartTime": 6.4, "EndTime": 7.0, "IsPartOfWord": false, "TransliteratedText": "lo" },
                                 { "Text": "world", "StartTime": 7.1, "EndTime": 8.0, "IsPartOfWord": false, "TransliteratedText": "world" }
-                            ]
+                            ],
+                            "TranslatedText": "Olá mundo"
                         },
                         "Background": [
                             {
@@ -817,8 +818,9 @@ private slots:
                         "Lead": {
                             "StartTime": 14.0,
                             "EndTime": 16.0,
+                            "TransliteratedText": "bakku",
                             "Syllables": [
-                                { "Text": "back", "StartTime": 14.0, "EndTime": 16.0, "IsPartOfWord": false }
+                                { "Text": "バック", "StartTime": 14.0, "EndTime": 16.0, "IsPartOfWord": false }
                             ]
                         }
                     }
@@ -832,14 +834,17 @@ private slots:
         QVERIFY(parsed->synchronized);
         QCOMPARE(parsed->syncKind, Lyrics::SyncKind::Syllable);
         QVERIFY(parsed->hasRomanized);
+        QVERIFY(parsed->hasTranslations);
         // Intro (0..6000) + line 1 (6000..8000) + gap (8000..14000) + line 2 (14000..16000)
         QCOMPARE(parsed->lines.size(), 4);
         QVERIFY(parsed->lines.at(0).instrumental);
         QCOMPARE(parsed->lines.at(1).words, QStringLiteral("Hello world"));
         QCOMPARE(parsed->lines.at(1).romanizedWords, QStringLiteral("hello world"));
+        QCOMPARE(parsed->lines.at(1).translatedWords, QStringLiteral("Olá mundo"));
         QCOMPARE(parsed->lines.at(1).backgroundVocals.size(), 1);
         QVERIFY(parsed->lines.at(2).instrumental);
         QVERIFY(parsed->lines.at(3).oppositeAligned);
+        QCOMPARE(parsed->lines.at(3).romanizedWords, QStringLiteral("bakku"));
 
         LyricsModel model;
         model.setLines(parsed->lines);
@@ -847,6 +852,30 @@ private slots:
         QCOMPARE(wordGroups.size(), 2); // "Hello" (2 syllables) and "world" (1 syllable)
         QCOMPARE(wordGroups.at(0).toList().size(), 2);
         QCOMPARE(wordGroups.at(1).toList().size(), 1);
+        QCOMPARE(model.data(model.index(1), LyricsModel::TranslatedWordsRole).toString(), QStringLiteral("Olá mundo"));
+        QCOMPARE(model.data(model.index(3), LyricsModel::RomanizedWordsRole).toString(), QStringLiteral("bakku"));
+    }
+
+    void spicyLyricsTranslationHelperParsesJsonAndDetectsScripts()
+    {
+        QVERIFY(!SpicyLyricsClient::containsNonLatinLetters(QStringLiteral("Hello world! 123")));
+        QVERIFY(SpicyLyricsClient::containsNonLatinLetters(QStringLiteral("夢灯籠")));
+        QVERIFY(SpicyLyricsClient::containsNonLatinLetters(QStringLiteral("안녕하세요")));
+
+        const QByteArray payload = R"([
+            [
+                ["Hello\n", "こんにちは\n", null, null, 1],
+                ["World", "世界", null, null, 1],
+                [null, null, null, "Kon'nichiwa\nSekai"]
+            ],
+            null,
+            "ja"
+        ])";
+        QString translated;
+        QString romanized;
+        QVERIFY(SpicyLyricsClient::parseTranslateResponse(payload, &translated, &romanized));
+        QCOMPARE(translated, QStringLiteral("Hello\nWorld"));
+        QCOMPARE(romanized, QStringLiteral("Kon'nichiwa\nSekai"));
     }
 
     void spicyLyricsCacheExpiresAfterThirtyDays()

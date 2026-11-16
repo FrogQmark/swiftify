@@ -669,6 +669,8 @@
   "Use Spicy Lyrics": "Использовать Spicy Lyrics",
   "Spicy Lyrics Client Key": "Клиентский ключ Spicy Lyrics",
   "Show romanized lyrics": "Показывать романизацию текста",
+  "Show translated lyrics": "Показывать перевод текста",
+  "Translation language": "Язык перевода",
   "Paste your own client key from Spicy Lyrics to enable syllable-synced lyrics in the immersive player. Cached lyrics expire after 30 days, and Spotify lyrics are used as a fallback.": "Вставьте свой клиентский ключ Spicy Lyrics для послоговой синхронизации в полноэкранном плеере. Кэш хранится 30 дней, а при отсутствии используется текст Spotify.",
   "Open Spicy Lyrics Developer Portal": "Открыть портал разработчиков Spicy Lyrics"
 }

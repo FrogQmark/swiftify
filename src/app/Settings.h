@@ -90,6 +90,8 @@ class Settings : public QObject {
     Q_PROPERTY(bool spicyLyricsEnabled READ spicyLyricsEnabled WRITE setSpicyLyricsEnabled NOTIFY spicyLyricsEnabledChanged FINAL)
     Q_PROPERTY(QString spicyLyricsApiKey READ spicyLyricsApiKey WRITE setSpicyLyricsApiKey NOTIFY spicyLyricsApiKeyChanged FINAL)
     Q_PROPERTY(bool spicyLyricsRomanized READ spicyLyricsRomanized WRITE setSpicyLyricsRomanized NOTIFY spicyLyricsRomanizedChanged FINAL)
+    Q_PROPERTY(bool spicyLyricsTranslated READ spicyLyricsTranslated WRITE setSpicyLyricsTranslated NOTIFY spicyLyricsTranslatedChanged FINAL)
+    Q_PROPERTY(QString lyricsTranslationLanguage READ lyricsTranslationLanguage WRITE setLyricsTranslationLanguage NOTIFY lyricsTranslationLanguageChanged FINAL)
     Q_PROPERTY(bool loggingEnabled READ isLoggingEnabled WRITE setLoggingEnabled NOTIFY loggingEnabledChanged FINAL)
     Q_PROPERTY(bool loggingActive READ isLoggingActive CONSTANT FINAL)
     Q_PROPERTY(QString logDirectory READ logDirectory CONSTANT FINAL)
@@ -219,6 +221,10 @@ public:
     void setSpicyLyricsApiKey(const QString &value);
     bool spicyLyricsRomanized() const { return m_spicyLyricsRomanized; }
     void setSpicyLyricsRomanized(bool value);
+    bool spicyLyricsTranslated() const { return m_spicyLyricsTranslated; }
+    void setSpicyLyricsTranslated(bool value);
+    QString lyricsTranslationLanguage() const { return m_lyricsTranslationLanguage; }
+    void setLyricsTranslationLanguage(const QString &value);
     QString language() const { return m_language; }
     void setLanguage(const QString &value);
     bool isLoggingEnabled() const { return m_loggingEnabled; }
@@ -278,6 +284,8 @@ signals:
     void spicyLyricsEnabledChanged();
     void spicyLyricsApiKeyChanged();
     void spicyLyricsRomanizedChanged();
+    void spicyLyricsTranslatedChanged();
+    void lyricsTranslationLanguageChanged();
     void loggingEnabledChanged();
     void languageChanged();
     void languageAvailabilityChanged();
@@ -333,6 +341,8 @@ private:
     bool m_spicyLyricsEnabled = true;
     QString m_spicyLyricsApiKey;
     bool m_spicyLyricsRomanized = false;
+    bool m_spicyLyricsTranslated = false;
+    QString m_lyricsTranslationLanguage = QStringLiteral("en");
     QString m_language = QStringLiteral("system");
     bool m_loggingEnabled = false;
     bool m_revertedDisabledLanguage = false;

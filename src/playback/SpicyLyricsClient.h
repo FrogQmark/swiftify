@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include "playback/Lyrics.h"
+
 #include <QByteArray>
 #include <QCoroTask>
 #include <QDateTime>
@@ -82,6 +84,14 @@ public:
 
     QCoro::Task<std::optional<QByteArray>> fetchLyricsJson(QString trackId, QString apiKey,
                                                            bool bypassCache = false);
+
+    /// optionally fills missing romanized and/or translated lines using cached
+    /// results or public translation requests, bounded to the 30-day cache TTL.
+    QCoro::Task<> enrichLyrics(Lyrics &lyrics, QString cacheKey,
+                               bool wantRomanized, bool wantTranslated, QString targetLanguage);
+
+    static bool containsNonLatinLetters(const QString &text);
+    static bool parseTranslateResponse(const QByteArray &json, QString *translatedOut, QString *romanizedOut);
 
 private:
     QNetworkAccessManager *m_network;

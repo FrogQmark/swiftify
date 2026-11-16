@@ -207,6 +207,13 @@ void Settings::load()
     m_spicyLyricsEnabled = stored<bool>(m_store, "spicyLyricsEnabled", m_spicyLyricsEnabled);
     m_spicyLyricsApiKey = stored<QString>(m_store, "spicyLyricsApiKey", {}).trimmed();
     m_spicyLyricsRomanized = stored<bool>(m_store, "spicyLyricsRomanized", m_spicyLyricsRomanized);
+    m_spicyLyricsTranslated = stored<bool>(m_store, "spicyLyricsTranslated", m_spicyLyricsTranslated);
+    {
+        const QString raw = stored<QString>(m_store, "lyricsTranslationLanguage", m_lyricsTranslationLanguage).trimmed();
+        if (QRegularExpression(QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,4})?$")).match(raw).hasMatch()) {
+            m_lyricsTranslationLanguage = raw;
+        }
+    }
     const QString configuredLanguage = oneOf(
         stored<QString>(m_store, "language", m_language),
         {QStringLiteral("system"), QStringLiteral("en"), QStringLiteral("ru"), QStringLiteral("de")},
@@ -651,6 +658,24 @@ void Settings::setSpicyLyricsRomanized(bool value)
     m_spicyLyricsRomanized = value;
     m_store.setValue(QStringLiteral("spicyLyricsRomanized"), value);
     emit spicyLyricsRomanizedChanged();
+}
+
+void Settings::setSpicyLyricsTranslated(bool value)
+{
+    if (m_spicyLyricsTranslated == value) return;
+    m_spicyLyricsTranslated = value;
+    m_store.setValue(QStringLiteral("spicyLyricsTranslated"), value);
+    emit spicyLyricsTranslatedChanged();
+}
+
+void Settings::setLyricsTranslationLanguage(const QString &raw)
+{
+    const QString value = raw.trimmed();
+    if (!QRegularExpression(QStringLiteral("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,4})?$")).match(value).hasMatch()) return;
+    if (m_lyricsTranslationLanguage == value) return;
+    m_lyricsTranslationLanguage = value;
+    m_store.setValue(QStringLiteral("lyricsTranslationLanguage"), value);
+    emit lyricsTranslationLanguageChanged();
 }
 void Settings::setLanguage(const QString &raw)
 {

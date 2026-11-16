@@ -662,6 +662,8 @@
   "Use Spicy Lyrics": "Spicy Lyrics verwenden",
   "Spicy Lyrics Client Key": "Spicy-Lyrics-Client-Schlüssel",
   "Show romanized lyrics": "Romanisierte Songtexte anzeigen",
+  "Show translated lyrics": "Übersetzte Songtexte anzeigen",
+  "Translation language": "Übersetzungssprache",
   "Paste your own client key from Spicy Lyrics to enable syllable-synced lyrics in the immersive player. Cached lyrics expire after 30 days, and Spotify lyrics are used as a fallback.": "Füge deinen eigenen Client-Schlüssel von Spicy Lyrics ein, um silbensynchrone Songtexte im immersiven Player zu aktivieren. Zwischengespeicherte Texte laufen nach 30 Tagen ab, und Spotify-Songtexte dienen als Fallback.",
   "Open Spicy Lyrics Developer Portal": "Spicy Lyrics Developer Portal öffnen"
 }

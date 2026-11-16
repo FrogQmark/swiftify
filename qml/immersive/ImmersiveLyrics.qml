@@ -38,6 +38,295 @@ Item {
     property double anchorWallMs: Date.now()
     property real displayPositionMs: Player.livePositionMs
 
+    component SweepGlyph: Item {
+        id: glyph
+
+        property string text: ""
+        property int fontSize: 30
+        property int fontWeight: Font.Bold
+        property bool lineActive: false
+        property real progress: 0
+        property real glowStrength: 0
+        property real feather: 0.22
+
+        implicitWidth: mainText.implicitWidth
+        implicitHeight: mainText.implicitHeight
+
+        // Per-word / per-letter halo bloom while this syllable or letter is sung
+        StyledText {
+            visible: glyph.glowStrength > 0.01 && !Appearance.performanceMode
+            text: glyph.text
+            font.pixelSize: glyph.fontSize
+            font.weight: glyph.fontWeight
+            color: Qt.lighter(PlayerStyle.primary, 1.45)
+            opacity: glyph.glowStrength * 0.85
+            layer.enabled: visible
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: 0.85
+                blurMax: 22
+                shadowEnabled: true
+                shadowColor: PlayerStyle.primary
+                shadowOpacity: 0.9
+                shadowBlur: 1.0
+                shadowHorizontalOffset: 0
+                shadowVerticalOffset: 0
+            }
+        }
+
+        StyledText {
+            id: mainText
+            text: glyph.text
+            font.pixelSize: glyph.fontSize
+            font.weight: glyph.fontWeight
+            color: "white"
+            opacity: (layer.enabled || !glyph.lineActive || !Player.lyricsSynchronized) ? 1.0 : 0.36
+
+            layer.enabled: glyph.lineActive && Player.lyricsSynchronized && !Appearance.performanceMode
+            layer.effect: ShaderEffect {
+                property variant source
+                property color glowColor: Qt.rgba(PlayerStyle.primary.r, PlayerStyle.primary.g, PlayerStyle.primary.b, 1.0)
+                property real progress: glyph.progress
+                property real feather: glyph.feather
+                property real baseAlpha: 0.36
+                property real glowBoost: glyph.glowStrength
+                fragmentShader: "qrc:/shaders/lyric_sweep.frag.qsb"
+            }
+        }
+
+        // Plain clip wipe fallback when Performance Mode disables shaders
+        Item {
+            clip: true
+            width: glyph.width * glyph.progress
+            height: glyph.height
+            visible: Appearance.performanceMode && glyph.lineActive && Player.lyricsSynchronized && width > 0
+
+            StyledText {
+                text: glyph.text
+                font.pixelSize: glyph.fontSize
+                font.weight: glyph.fontWeight
+                color: "white"
+            }
+        }
+    }
+
+    component SyllableLines: Item {
+        id: wrapBox
+
+        property var wordGroupsModel: []
+        property bool rightAligned: false
+        property bool lineActive: false
+        property int fontSize: 30
+        property int fontWeight: Font.Bold
+        property real spacingX: 9
+        property real spacingY: 4
+        property bool enableLift: true
+        property real contentHeight: 0
+
+        implicitHeight: contentHeight
+        height: contentHeight
+
+        function splitLetters(text: string): var {
+            // Avoid splitting complex Arabic/Indic shaping or combining marks mid-cluster
+            for (let i: int = 0; i < text.length; ++i) {
+                const code: int = text.charCodeAt(i)
+                if ((code >= 0x0590 && code <= 0x06FF) || (code >= 0x0900 && code <= 0x0DFF) || (code >= 0x0300 && code <= 0x036F)) {
+                    return []
+                }
+            }
+            return text.length > 1 ? text.split("") : []
+        }
+
+        function layoutWords() {
+            const maxWidth: real = width
+            const total: int = wordRepeater.count
+            if (maxWidth <= 0 || total <= 0) {
+                contentHeight = 0
+                return
+            }
+            let y: real = 0
+            let rowStart: int = 0
+            let rowWidth: real = 0
+            let rowHeight: real = 0
+            let rowCount: int = 0
+
+            for (let i: int = 0; i <= total; ++i) {
+                let itemWidth: real = 0
+                let itemHeight: real = 0
+                let hasItem: bool = false
+                let flush: bool = (i === total)
+                if (i < total) {
+                    const probe = wordRepeater.itemAt(i)
+                    if (probe) {
+                        itemWidth = probe.implicitWidth
+                        itemHeight = probe.implicitHeight
+                        hasItem = true
+                        if (rowCount > 0 && rowWidth + spacingX + itemWidth > maxWidth) {
+                            flush = true
+                        }
+                    }
+                }
+                if (flush && rowCount > 0) {
+                    let x: real = rightAligned ? Math.max(0, maxWidth - rowWidth) : 0
+                    for (let j: int = rowStart; j < i; ++j) {
+                        const word = wordRepeater.itemAt(j)
+                        if (word) {
+                            word.x = x
+                            word.y = y + (rowHeight - word.implicitHeight) / 2
+                            x += word.implicitWidth + spacingX
+                        }
+                    }
+                    y += rowHeight + spacingY
+                    rowStart = i
+                    rowWidth = 0
+                    rowHeight = 0
+                    rowCount = 0
+                }
+                if (hasItem) {
+                    rowWidth = rowCount > 0 ? rowWidth + spacingX + itemWidth : itemWidth
+                    rowHeight = Math.max(rowHeight, itemHeight)
+                    rowCount += 1
+                }
+            }
+            contentHeight = y > 0 ? y - spacingY : 0
+        }
+
+        onWidthChanged: layoutWords()
+        onRightAlignedChanged: layoutWords()
+        onWordGroupsModelChanged: Qt.callLater(layoutWords)
+        Component.onCompleted: layoutWords()
+
+        Repeater {
+            id: wordRepeater
+            model: wrapBox.wordGroupsModel
+            onItemAdded: Qt.callLater(wrapBox.layoutWords)
+            onItemRemoved: Qt.callLater(wrapBox.layoutWords)
+
+            delegate: Row {
+                id: wordRow
+                required property var modelData
+                spacing: 0
+                onImplicitWidthChanged: Qt.callLater(wrapBox.layoutWords)
+                onImplicitHeightChanged: Qt.callLater(wrapBox.layoutWords)
+
+                Repeater {
+                    model: wordRow.modelData
+
+                    delegate: Item {
+                        id: sylItem
+                        required property var modelData
+                        readonly property string sylText: modelData && modelData.text !== undefined ? String(modelData.text) : ""
+                        readonly property real startMs: modelData ? Number(modelData.startTimeMs) : 0
+                        readonly property real endMs: Math.max(startMs + 1, modelData ? Number(modelData.endTimeMs) : 1)
+                        readonly property real durationMs: Math.max(1, endMs - startMs)
+                        readonly property real progress: !Player.lyricsSynchronized ? 1
+                            : !wrapBox.lineActive ? (root.displayPositionMs >= endMs ? 1 : 0)
+                            : Math.max(0, Math.min(1, (root.displayPositionMs - startMs) / durationMs))
+                        readonly property bool singing: wrapBox.lineActive && progress > 0 && progress < 1
+                        readonly property bool longSyllable: wrapBox.enableLift && durationMs >= 750 && sylText.length > 1
+                            && !Appearance.reduceMotion && !Appearance.performanceMode
+                        readonly property var letters: longSyllable ? wrapBox.splitLetters(sylText) : []
+                        readonly property bool useLetters: letters.length > 1
+
+                        property real wordGlow: !Appearance.performanceMode && wrapBox.lineActive && singing ? 1.0 : 0.0
+                        property real lift: (wrapBox.enableLift && !useLetters && !Appearance.reduceMotion && !Appearance.performanceMode && wrapBox.lineActive)
+                            ? (singing ? -2.0 : (progress >= 1 ? -0.5 : 0))
+                            : 0
+                        property real wordScale: (wrapBox.enableLift && !useLetters && !Appearance.reduceMotion && !Appearance.performanceMode && wrapBox.lineActive && singing)
+                            ? 1.04 : 1.0
+
+                        implicitWidth: useLetters ? letterRow.implicitWidth : singleGlyph.implicitWidth
+                        implicitHeight: useLetters ? letterRow.implicitHeight : singleGlyph.implicitHeight
+                        scale: wordScale
+                        transform: Translate { y: sylItem.lift }
+
+                        Behavior on wordGlow {
+                            enabled: !Appearance.performanceMode
+                            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                        }
+                        Behavior on lift {
+                            enabled: wrapBox.enableLift && !Appearance.reduceMotion && !Appearance.performanceMode
+                            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                        }
+                        Behavior on wordScale {
+                            enabled: wrapBox.enableLift && !Appearance.reduceMotion && !Appearance.performanceMode
+                            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                        }
+
+                        SweepGlyph {
+                            id: singleGlyph
+                            visible: !sylItem.useLetters
+                            text: sylItem.sylText
+                            fontSize: wrapBox.fontSize
+                            fontWeight: wrapBox.fontWeight
+                            lineActive: wrapBox.lineActive
+                            progress: sylItem.progress
+                            glowStrength: sylItem.wordGlow
+                            feather: 0.24
+                        }
+
+                        Row {
+                            id: letterRow
+                            visible: sylItem.useLetters
+                            spacing: 0
+
+                            Repeater {
+                                model: sylItem.useLetters ? sylItem.letters : []
+
+                                delegate: Item {
+                                    id: letterItem
+                                    required property int index
+                                    required property string modelData
+                                    readonly property int letterCount: Math.max(1, sylItem.letters.length)
+                                    readonly property real window: Math.min(0.45, 1.5 / letterCount)
+                                    readonly property real lStart: letterCount > 1 ? (index / (letterCount - 1)) * (1.0 - window) : 0
+                                    readonly property real lProgress: !Player.lyricsSynchronized ? 1
+                                        : !wrapBox.lineActive ? (root.displayPositionMs >= sylItem.endMs ? 1 : 0)
+                                        : Math.max(0, Math.min(1, (sylItem.progress - lStart) / Math.max(0.01, window)))
+                                    readonly property real wave: wrapBox.lineActive && sylItem.singing ? Math.sin(lProgress * Math.PI) : 0
+                                    readonly property bool activeLetter: wrapBox.lineActive && sylItem.singing && lProgress > 0 && lProgress < 1
+
+                                    property real letterGlow: activeLetter ? 1.0 : (wrapBox.lineActive && sylItem.singing && lProgress >= 1 ? 0.55 : 0.0)
+                                    property real letterLift: wrapBox.lineActive && sylItem.singing
+                                        ? (-5.5 * wave - (lProgress >= 1 ? 1.5 : 0))
+                                        : (wrapBox.lineActive && sylItem.progress >= 1 ? -0.5 : 0)
+                                    property real letterScale: wrapBox.lineActive && sylItem.singing
+                                        ? (1.0 + 0.18 * wave + 0.04) : 1.0
+
+                                    implicitWidth: letterGlyph.implicitWidth
+                                    implicitHeight: letterGlyph.implicitHeight
+                                    scale: letterScale
+                                    transform: Translate { y: letterItem.letterLift }
+
+                                    Behavior on letterGlow {
+                                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                                    }
+                                    Behavior on letterLift {
+                                        NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                                    }
+                                    Behavior on letterScale {
+                                        NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                                    }
+
+                                    SweepGlyph {
+                                        id: letterGlyph
+                                        text: letterItem.modelData
+                                        fontSize: wrapBox.fontSize
+                                        fontWeight: wrapBox.fontWeight
+                                        lineActive: wrapBox.lineActive
+                                        progress: letterItem.lProgress
+                                        glowStrength: letterItem.letterGlow
+                                        feather: 0.35
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     function syncDisplayPosition() {
         anchorPositionMs = Player.livePositionMs
         anchorWallMs = Date.now()
@@ -169,6 +458,7 @@ Item {
             required property int startTimeMs
             required property int endTimeMs
             required property string romanizedWords
+            required property string translatedWords
             required property bool oppositeAligned
             required property bool instrumental
             required property var wordGroups
@@ -177,6 +467,7 @@ Item {
             readonly property bool active: !Player.lyricsSynchronized || Player.activeLyricIndex === index
             readonly property bool hasSyllables: !instrumental && wordGroups !== undefined && wordGroups !== null && wordGroups.length > 0
             readonly property bool hasRomanized: !instrumental && Settings.spicyLyricsRomanized && romanizedWords.length > 0
+            readonly property bool hasTranslation: !instrumental && Settings.spicyLyricsTranslated && translatedWords.length > 0
             readonly property bool hasBackground: !instrumental && backgroundVocals !== undefined && backgroundVocals !== null && backgroundVocals.length > 0
             readonly property int distanceFromActive: Player.activeLyricIndex >= 0 ? Math.abs(index - Player.activeLyricIndex) : 0
             readonly property bool nearViewport: distanceFromActive <= 6
@@ -201,8 +492,8 @@ Item {
                 if (instrumental) {
                     return instrumentalRow.implicitHeight + 28
                 }
-                const mainHeight = hasSyllables ? syllableFlow.implicitHeight + 28 : label.implicitHeight
-                const extraHeight = (hasRomanized || hasBackground) ? extraCol.implicitHeight + 10 : 0
+                const mainHeight = hasSyllables ? leadSyllables.implicitHeight + 28 : label.implicitHeight
+                const extraHeight = (hasRomanized || hasTranslation || hasBackground) ? extraCol.implicitHeight + 10 : 0
                 return mainHeight + extraHeight
             }
 
@@ -304,79 +595,20 @@ Item {
                 }
 
                 // Syllable-by-syllable karaoke layout (grouped by whole words so lines never split mid-word)
-                Item {
+                SyllableLines {
+                    id: leadSyllables
                     visible: line.hasSyllables
                     x: 24
                     y: 22
                     width: Math.max(0, parent.width - 48)
-                    height: syllableFlow.implicitHeight
-
-                    Flow {
-                        id: syllableFlow
-                        width: line.oppositeAligned ? Math.min(implicitWidth, parent.width) : parent.width
-                        anchors.right: line.oppositeAligned ? parent.right : undefined
-                        spacing: 9
-
-                        Repeater {
-                            model: line.hasSyllables ? line.wordGroups : []
-
-                            delegate: Row {
-                                id: wordRow
-                                required property var modelData
-                                spacing: 0
-
-                                Repeater {
-                                    model: wordRow.modelData
-
-                                    delegate: Item {
-                                        id: sylItem
-                                        required property var modelData
-                                        readonly property real startMs: modelData ? Number(modelData.startTimeMs) : 0
-                                        readonly property real endMs: Math.max(startMs + 1, modelData ? Number(modelData.endTimeMs) : 1)
-                                        readonly property real progress: !Player.lyricsSynchronized ? 1
-                                            : !line.active ? (root.displayPositionMs >= endMs ? 1 : 0)
-                                            : Math.max(0, Math.min(1, (root.displayPositionMs - startMs) / (endMs - startMs)))
-                                        readonly property bool singing: line.active && progress > 0 && progress < 1
-                                        property real lift: (!Appearance.reduceMotion && !Appearance.performanceMode && line.active)
-                                            ? (singing ? -2.0 : (progress >= 1 ? -0.5 : 0))
-                                            : 0
-
-                                        implicitWidth: baseSyl.implicitWidth
-                                        implicitHeight: baseSyl.implicitHeight
-                                        transform: Translate { y: sylItem.lift }
-
-                                        Behavior on lift {
-                                            enabled: !Appearance.reduceMotion && !Appearance.performanceMode
-                                            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
-                                        }
-
-                                        StyledText {
-                                            id: baseSyl
-                                            text: sylItem.modelData && sylItem.modelData.text !== undefined ? String(sylItem.modelData.text) : ""
-                                            font.pixelSize: 30
-                                            font.weight: Font.Bold
-                                            color: "white"
-                                            opacity: line.active ? 0.36 : 1.0
-                                        }
-
-                                        Item {
-                                            clip: true
-                                            width: sylItem.width * sylItem.progress
-                                            height: sylItem.height
-                                            visible: line.active && width > 0
-
-                                            StyledText {
-                                                text: sylItem.modelData && sylItem.modelData.text !== undefined ? String(sylItem.modelData.text) : ""
-                                                font.pixelSize: 30
-                                                font.weight: Font.Bold
-                                                color: "white"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    wordGroupsModel: line.hasSyllables ? line.wordGroups : []
+                    rightAligned: line.oppositeAligned
+                    lineActive: line.active
+                    fontSize: 30
+                    fontWeight: Font.Bold
+                    spacingX: 9
+                    spacingY: 4
+                    enableLift: true
                 }
 
                 // Instrumental break dots
@@ -413,12 +645,12 @@ Item {
                     }
                 }
 
-                // Romanized text and background vocals below the lead line
+                // Romanized text, translation, and background vocals below the lead line
                 Column {
                     id: extraCol
-                    visible: line.hasRomanized || line.hasBackground
+                    visible: line.hasRomanized || line.hasTranslation || line.hasBackground
                     x: 24
-                    y: line.hasSyllables ? syllableFlow.implicitHeight + 30 : label.implicitHeight + 10
+                    y: line.hasSyllables ? leadSyllables.implicitHeight + 30 : label.implicitHeight + 10
                     width: Math.max(0, parent.width - 48)
                     spacing: 8
 
@@ -434,6 +666,18 @@ Item {
                         opacity: 0.72
                     }
 
+                    StyledText {
+                        visible: line.hasTranslation
+                        width: parent.width
+                        text: line.translatedWords
+                        wrapMode: Text.Wrap
+                        horizontalAlignment: line.oppositeAligned ? Text.AlignRight : Text.AlignLeft
+                        font.pixelSize: 17
+                        font.weight: Font.Medium
+                        color: "white"
+                        opacity: 0.85
+                    }
+
                     Repeater {
                         model: line.hasBackground ? line.backgroundVocals : []
 
@@ -444,10 +688,13 @@ Item {
                             readonly property bool hasBgSyllables: bgWordGroups !== undefined && bgWordGroups !== null && bgWordGroups.length > 0
                             readonly property string bgRomanized: modelData && modelData.romanizedWords ? String(modelData.romanizedWords) : ""
                             readonly property bool showBgRomanized: Settings.spicyLyricsRomanized && bgRomanized.length > 0
+                            readonly property string bgTranslated: modelData && modelData.translatedWords ? String(modelData.translatedWords) : ""
+                            readonly property bool showBgTranslated: Settings.spicyLyricsTranslated && bgTranslated.length > 0
 
                             width: extraCol.width
-                            height: (hasBgSyllables ? bgFlow.implicitHeight : bgText.implicitHeight)
+                            height: (hasBgSyllables ? bgSyllables.implicitHeight : bgText.implicitHeight)
                                 + (showBgRomanized ? bgRomText.implicitHeight + 4 : 0)
+                                + (showBgTranslated ? bgTransText.implicitHeight + 4 : 0)
                             opacity: 0.75
 
                             StyledText {
@@ -462,69 +709,25 @@ Item {
                                 color: "white"
                             }
 
-                            Flow {
-                                id: bgFlow
+                            SyllableLines {
+                                id: bgSyllables
                                 visible: bgItem.hasBgSyllables
-                                width: line.oppositeAligned ? Math.min(implicitWidth, parent.width) : parent.width
-                                anchors.right: line.oppositeAligned ? parent.right : undefined
-                                spacing: 7
-
-                                Repeater {
-                                    model: bgItem.hasBgSyllables ? bgItem.bgWordGroups : []
-
-                                    delegate: Row {
-                                        id: bgWordRow
-                                        required property var modelData
-                                        spacing: 0
-
-                                        Repeater {
-                                            model: bgWordRow.modelData
-
-                                            delegate: Item {
-                                                id: bgSylItem
-                                                required property var modelData
-                                                readonly property real startMs: modelData ? Number(modelData.startTimeMs) : 0
-                                                readonly property real endMs: Math.max(startMs + 1, modelData ? Number(modelData.endTimeMs) : 1)
-                                                readonly property real progress: !Player.lyricsSynchronized ? 1
-                                                    : !line.active ? (root.displayPositionMs >= endMs ? 1 : 0)
-                                                    : Math.max(0, Math.min(1, (root.displayPositionMs - startMs) / (endMs - startMs)))
-
-                                                implicitWidth: baseBgSyl.implicitWidth
-                                                implicitHeight: baseBgSyl.implicitHeight
-
-                                                StyledText {
-                                                    id: baseBgSyl
-                                                    text: bgSylItem.modelData && bgSylItem.modelData.text !== undefined ? String(bgSylItem.modelData.text) : ""
-                                                    font.pixelSize: 20
-                                                    font.weight: Font.DemiBold
-                                                    color: "white"
-                                                    opacity: line.active ? 0.36 : 1.0
-                                                }
-
-                                                Item {
-                                                    clip: true
-                                                    width: bgSylItem.width * bgSylItem.progress
-                                                    height: bgSylItem.height
-                                                    visible: line.active && width > 0
-
-                                                    StyledText {
-                                                        text: bgSylItem.modelData && bgSylItem.modelData.text !== undefined ? String(bgSylItem.modelData.text) : ""
-                                                        font.pixelSize: 20
-                                                        font.weight: Font.DemiBold
-                                                        color: "white"
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                width: parent.width
+                                wordGroupsModel: bgItem.hasBgSyllables ? bgItem.bgWordGroups : []
+                                rightAligned: line.oppositeAligned
+                                lineActive: line.active
+                                fontSize: 20
+                                fontWeight: Font.DemiBold
+                                spacingX: 7
+                                spacingY: 3
+                                enableLift: false
                             }
 
                             StyledText {
                                 id: bgRomText
                                 visible: bgItem.showBgRomanized
                                 width: parent.width
-                                y: (bgItem.hasBgSyllables ? bgFlow.implicitHeight : bgText.implicitHeight) + 4
+                                y: (bgItem.hasBgSyllables ? bgSyllables.implicitHeight : bgText.implicitHeight) + 4
                                 text: bgItem.bgRomanized
                                 wrapMode: Text.Wrap
                                 horizontalAlignment: line.oppositeAligned ? Text.AlignRight : Text.AlignLeft
@@ -532,6 +735,21 @@ Item {
                                 font.weight: Font.Normal
                                 color: "white"
                                 opacity: 0.7
+                            }
+
+                            StyledText {
+                                id: bgTransText
+                                visible: bgItem.showBgTranslated
+                                width: parent.width
+                                y: (bgItem.hasBgSyllables ? bgSyllables.implicitHeight : bgText.implicitHeight)
+                                    + (bgItem.showBgRomanized ? bgRomText.implicitHeight + 4 : 0) + 4
+                                text: bgItem.bgTranslated
+                                wrapMode: Text.Wrap
+                                horizontalAlignment: line.oppositeAligned ? Text.AlignRight : Text.AlignLeft
+                                font.pixelSize: 15
+                                font.weight: Font.Normal
+                                color: "white"
+                                opacity: 0.85
                             }
                         }
                     }

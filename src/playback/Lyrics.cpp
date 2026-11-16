@@ -95,14 +95,25 @@ LyricVocalGroup parseVocalGroup(const QJsonObject &object)
         LyricSyllable syllable;
         syllable.startTimeMs = secondsToMs(s.value(QStringLiteral("StartTime")));
         syllable.endTimeMs = secondsToMs(s.value(QStringLiteral("EndTime")));
-        syllable.text = s.value(QStringLiteral("Text")).toString();
-        syllable.romanizedText = firstString(s, {"TransliteratedText", "RomanizedText"});
+        syllable.text = firstString(s, {"Text", "text"});
+        syllable.romanizedText = firstString(s, {
+            "TransliteratedText", "RomanizedText", "Romanization", "Transliteration",
+            "transliteratedText", "romanizedText"
+        });
         syllable.isPartOfWord = s.value(QStringLiteral("IsPartOfWord")).toBool(false);
         if (syllable.endTimeMs < syllable.startTimeMs) {
             syllable.endTimeMs = syllable.startTimeMs;
         }
         group.syllables.append(std::move(syllable));
     }
+
+    const QString groupRomanized = firstString(object, {
+        "TransliteratedText", "RomanizedText", "Romanization", "Transliteration",
+        "transliteratedText", "romanizedText"
+    }).trimmed();
+    group.translatedWords = firstString(object, {
+        "TranslatedText", "Translation", "translatedText", "translation"
+    }).trimmed();
 
     if (!group.syllables.isEmpty()) {
         if (group.startTimeMs == 0) {
@@ -113,9 +124,12 @@ LyricVocalGroup parseVocalGroup(const QJsonObject &object)
         }
         group.words = joinSyllableText(group.syllables, false);
         group.romanizedWords = joinSyllableText(group.syllables, true);
+        if (group.romanizedWords.isEmpty()) {
+            group.romanizedWords = groupRomanized;
+        }
     } else {
-        group.words = object.value(QStringLiteral("Text")).toString().trimmed();
-        group.romanizedWords = firstString(object, {"TransliteratedText", "RomanizedText"}).trimmed();
+        group.words = firstString(object, {"Text", "text"}).trimmed();
+        group.romanizedWords = groupRomanized;
     }
     return group;
 }
@@ -322,13 +336,26 @@ std::optional<Lyrics> Lyrics::fromSpicyJson(const QByteArray &json)
             line.endTimeMs = lead.endTimeMs;
             line.words = lead.words;
             line.romanizedWords = lead.romanizedWords;
+            line.translatedWords = lead.translatedWords;
             line.syllables = lead.syllables;
+            if (line.romanizedWords.isEmpty()) {
+                line.romanizedWords = firstString(entry, {
+                    "TransliteratedText", "RomanizedText", "Romanization", "Transliteration",
+                    "transliteratedText", "romanizedText"
+                }).trimmed();
+            }
+            if (line.translatedWords.isEmpty()) {
+                line.translatedWords = firstString(entry, {
+                    "TranslatedText", "Translation", "translatedText", "translation"
+                }).trimmed();
+            }
         } else {
             const LyricVocalGroup lead = parseVocalGroup(entry);
             line.startTimeMs = lead.startTimeMs;
             line.endTimeMs = lead.endTimeMs;
             line.words = lead.words;
             line.romanizedWords = lead.romanizedWords;
+            line.translatedWords = lead.translatedWords;
             line.syllables = lead.syllables;
         }
 
@@ -341,12 +368,18 @@ std::optional<Lyrics> Lyrics::fromSpicyJson(const QByteArray &json)
                 if (!bg.romanizedWords.isEmpty()) {
                     lyrics.hasRomanized = true;
                 }
+                if (!bg.translatedWords.isEmpty()) {
+                    lyrics.hasTranslations = true;
+                }
                 line.backgroundVocals.append(std::move(bg));
             }
         }
 
         if (!line.romanizedWords.isEmpty()) {
             lyrics.hasRomanized = true;
+        }
+        if (!line.translatedWords.isEmpty()) {
+            lyrics.hasTranslations = true;
         }
         if (!line.words.isEmpty() || !line.backgroundVocals.isEmpty()) {
             parsed.append(std::move(line));
@@ -438,6 +471,7 @@ QVariant LyricsModel::data(const QModelIndex &index, int role) const
     case StartTimeMsRole: return line.startTimeMs;
     case EndTimeMsRole: return line.endTimeMs;
     case RomanizedWordsRole: return line.romanizedWords;
+    case TranslatedWordsRole: return line.translatedWords;
     case OppositeAlignedRole: return line.oppositeAligned;
     case InstrumentalRole: return line.instrumental;
     case WordGroupsRole: return buildWordGroups(line.syllables);
@@ -447,6 +481,7 @@ QVariant LyricsModel::data(const QModelIndex &index, int role) const
             QVariantMap entry;
             entry.insert(QStringLiteral("words"), bg.words);
             entry.insert(QStringLiteral("romanizedWords"), bg.romanizedWords);
+            entry.insert(QStringLiteral("translatedWords"), bg.translatedWords);
             entry.insert(QStringLiteral("startTimeMs"), int(bg.startTimeMs));
             entry.insert(QStringLiteral("endTimeMs"), int(bg.endTimeMs));
             entry.insert(QStringLiteral("wordGroups"), buildWordGroups(bg.syllables));
@@ -465,6 +500,7 @@ QHash<int, QByteArray> LyricsModel::roleNames() const
         {StartTimeMsRole, "startTimeMs"},
         {EndTimeMsRole, "endTimeMs"},
         {RomanizedWordsRole, "romanizedWords"},
+        {TranslatedWordsRole, "translatedWords"},
         {OppositeAlignedRole, "oppositeAligned"},
         {InstrumentalRole, "instrumental"},
         {WordGroupsRole, "wordGroups"},

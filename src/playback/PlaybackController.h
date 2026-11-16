@@ -79,6 +79,7 @@ class PlaybackController : public QObject {
     Q_PROPERTY(bool lyricsSynchronized READ lyricsSynchronized NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(bool lyricsSyllableSynced READ lyricsSyllableSynced NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(bool hasRomanizedLyrics READ hasRomanizedLyrics NOTIFY lyricsChanged FINAL)
+    Q_PROPERTY(bool hasTranslatedLyrics READ hasTranslatedLyrics NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(QString lyricsProvider READ lyricsProvider NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(bool loadingLyrics READ isLoadingLyrics NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(QString lyricsMessage READ lyricsMessage NOTIFY lyricsChanged FINAL)
@@ -142,6 +143,7 @@ public:
     bool lyricsSynchronized() const { return m_lyrics && m_lyrics->synchronized; }
     bool lyricsSyllableSynced() const { return m_lyrics && m_lyrics->syncKind == Lyrics::SyncKind::Syllable; }
     bool hasRomanizedLyrics() const { return m_lyrics && m_lyrics->hasRomanized; }
+    bool hasTranslatedLyrics() const { return m_lyrics && m_lyrics->hasTranslations; }
     QString lyricsProvider() const { return m_lyrics ? m_lyrics->provider : QString(); }
     bool isLoadingLyrics() const { return m_loadingLyrics; }
     QString lyricsMessage() const { return m_lyricsMessage; }

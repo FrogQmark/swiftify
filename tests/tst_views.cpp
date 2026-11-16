@@ -936,6 +936,7 @@ private slots:
     {
         Rig rig;
         rig.settings.setSpicyLyricsRomanized(true);
+        rig.settings.setSpicyLyricsTranslated(true);
         QFile lyrics(rig.directory.filePath(QStringLiteral("sung.lrc")));
         QVERIFY(lyrics.open(QIODevice::WriteOnly));
         lyrics.write("[00:00.00]placeholder\n");
@@ -951,6 +952,7 @@ private slots:
         lead.endTimeMs = 4000;
         lead.words = QStringLiteral("Hello world");
         lead.romanizedWords = QStringLiteral("hello world");
+        lead.translatedWords = QStringLiteral("Olá mundo");
         lead.syllables = {
             {0, 1000, QStringLiteral("Hel"), QStringLiteral("hel"), true},
             {1000, 2000, QStringLiteral("lo"), QStringLiteral("lo"), false},
@@ -965,8 +967,15 @@ private slots:
         LyricLine duet;
         duet.startTimeMs = 4500;
         duet.endTimeMs = 7000;
-        duet.words = QStringLiteral("Back to you");
+        duet.words = QStringLiteral("It's like the face inside");
         duet.oppositeAligned = true;
+        duet.syllables = {
+            {4500, 5000, QStringLiteral("It's"), {}, false},
+            {5000, 5500, QStringLiteral("like"), {}, false},
+            {5500, 6000, QStringLiteral("the"), {}, false},
+            {6000, 6500, QStringLiteral("face"), {}, false},
+            {6500, 7000, QStringLiteral("inside"), {}, false},
+        };
 
         LyricLine breakLine;
         breakLine.startTimeMs = 7500;

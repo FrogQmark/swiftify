@@ -40,6 +40,7 @@ struct LyricVocalGroup {
     quint32 endTimeMs = 0;
     QString words;
     QString romanizedWords;
+    QString translatedWords;
     QList<LyricSyllable> syllables;
 };
 
@@ -48,6 +49,7 @@ struct LyricLine {
     quint32 endTimeMs = 0;
     QString words;
     QString romanizedWords;
+    QString translatedWords;
     bool oppositeAligned = false;
     bool instrumental = false;
     QList<LyricSyllable> syllables;
@@ -64,6 +66,7 @@ struct Lyrics {
     bool synchronized = false;
     SyncKind syncKind = SyncKind::Unsynced;
     bool hasRomanized = false;
+    bool hasTranslations = false;
     QStringList songWriters;
     QList<LyricLine> lines;
 
@@ -92,6 +95,7 @@ public:
         StartTimeMsRole,
         EndTimeMsRole,
         RomanizedWordsRole,
+        TranslatedWordsRole,
         OppositeAlignedRole,
         InstrumentalRole,
         WordGroupsRole,

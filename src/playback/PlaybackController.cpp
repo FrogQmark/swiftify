@@ -103,6 +103,9 @@ PlaybackController::PlaybackController(PlaybackCore *core, SpotifySession *sessi
     };
     connect(m_settings, &Settings::spicyLyricsEnabledChanged, this, reloadCurrentLyrics);
     connect(m_settings, &Settings::spicyLyricsApiKeyChanged, this, reloadCurrentLyrics);
+    connect(m_settings, &Settings::spicyLyricsRomanizedChanged, this, reloadCurrentLyrics);
+    connect(m_settings, &Settings::spicyLyricsTranslatedChanged, this, reloadCurrentLyrics);
+    connect(m_settings, &Settings::lyricsTranslationLanguageChanged, this, reloadCurrentLyrics);
     connect(m_session, &SpotifySession::playbackConnected, this, [this] {
         try {
             m_core->setVolume(float(m_volume));
@@ -1384,6 +1387,17 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
     }
     if (isCancelled(token) || !isCurrent(song)) {
         co_return;
+    }
+    if (lyrics && m_spicyLyrics && (m_settings->spicyLyricsRomanized() || m_settings->spicyLyricsTranslated())) {
+        const std::optional<SpotifyLink> link = parseSpotifyLink(song.uri);
+        const QString cacheKey = (link && link->kind == SpotifyLink::Kind::Track) ? link->id : song.uri;
+        co_await m_spicyLyrics->enrichLyrics(*lyrics, cacheKey,
+                                            m_settings->spicyLyricsRomanized(),
+                                            m_settings->spicyLyricsTranslated(),
+                                            m_settings->lyricsTranslationLanguage());
+        if (isCancelled(token) || !isCurrent(song)) {
+            co_return;
+        }
     }
     m_loadingLyrics = false;
     if (lyrics) {

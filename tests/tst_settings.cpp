@@ -287,10 +287,14 @@ private slots:
             QVERIFY(settings.spicyLyricsEnabled());
             QVERIFY(settings.spicyLyricsApiKey().isEmpty());
             QVERIFY(!settings.spicyLyricsRomanized());
+            QVERIFY(!settings.spicyLyricsTranslated());
+            QCOMPARE(settings.lyricsTranslationLanguage(), QStringLiteral("en"));
 
             QSignalSpy enabledSpy(&settings, &Settings::spicyLyricsEnabledChanged);
             QSignalSpy keySpy(&settings, &Settings::spicyLyricsApiKeyChanged);
             QSignalSpy romanizedSpy(&settings, &Settings::spicyLyricsRomanizedChanged);
+            QSignalSpy translatedSpy(&settings, &Settings::spicyLyricsTranslatedChanged);
+            QSignalSpy langSpy(&settings, &Settings::lyricsTranslationLanguageChanged);
 
             settings.setSpicyLyricsEnabled(false);
             settings.setSpicyLyricsEnabled(false);
@@ -298,16 +302,25 @@ private slots:
             settings.setSpicyLyricsApiKey(QStringLiteral("sl_pk_test123"));
             settings.setSpicyLyricsRomanized(true);
             settings.setSpicyLyricsRomanized(true);
+            settings.setSpicyLyricsTranslated(true);
+            settings.setSpicyLyricsTranslated(true);
+            settings.setLyricsTranslationLanguage(QStringLiteral("invalid language!"));
+            settings.setLyricsTranslationLanguage(QStringLiteral("pt"));
+            settings.setLyricsTranslationLanguage(QStringLiteral("pt"));
 
             QCOMPARE(enabledSpy.count(), 1);
             QCOMPARE(keySpy.count(), 1);
             QCOMPARE(romanizedSpy.count(), 1);
+            QCOMPARE(translatedSpy.count(), 1);
+            QCOMPARE(langSpy.count(), 1);
             QCOMPARE(settings.spicyLyricsApiKey(), QStringLiteral("sl_pk_test123"));
         }
         Settings reopened(path);
         QVERIFY(!reopened.spicyLyricsEnabled());
         QCOMPARE(reopened.spicyLyricsApiKey(), QStringLiteral("sl_pk_test123"));
         QVERIFY(reopened.spicyLyricsRomanized());
+        QVERIFY(reopened.spicyLyricsTranslated());
+        QCOMPARE(reopened.lyricsTranslationLanguage(), QStringLiteral("pt"));
     }
 };
 

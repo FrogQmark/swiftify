@@ -32,6 +32,37 @@ Item {
     readonly property list<string> fades: ["none", "finalSeconds", "entire"]
     readonly property list<int> qualities: [96, 160, 320]
     readonly property list<int> cacheSizes: [500, 1000, 2000]
+    readonly property var translationLanguages: [
+        { code: "en", label: "English" },
+        { code: "pt", label: "Português" },
+        { code: "es", label: "Español" },
+        { code: "fr", label: "Français" },
+        { code: "de", label: "Deutsch" },
+        { code: "it", label: "Italiano" },
+        { code: "ja", label: "日本語" },
+        { code: "ko", label: "한국어" },
+        { code: "zh-CN", label: "中文 (简体)" },
+        { code: "zh-TW", label: "中文 (繁體)" },
+        { code: "ru", label: "Русский" },
+        { code: "ar", label: "العربية" },
+        { code: "hi", label: "हिन्दी" },
+        { code: "id", label: "Bahasa Indonesia" },
+        { code: "nl", label: "Nederlands" },
+        { code: "pl", label: "Polski" },
+        { code: "tr", label: "Türkçe" },
+        { code: "vi", label: "Tiếng Việt" },
+        { code: "th", label: "ไทย" },
+        { code: "uk", label: "Українська" }
+    ]
+
+    function translationLanguageLabel(code: string): string {
+        for (let i: int = 0; i < translationLanguages.length; ++i) {
+            if (translationLanguages[i].code === code) {
+                return String(translationLanguages[i].label)
+            }
+        }
+        return code
+    }
 
     component Page: Column {
         width: parent ? parent.width : 0
@@ -858,9 +889,57 @@ Item {
                 }
                 ConfigSwitch {
                     text: qsTr("Show romanized lyrics")
-                    enabled: Settings.spicyLyricsEnabled
                     checked: Settings.spicyLyricsRomanized
                     onToggledTo: (checked) => Settings.spicyLyricsRomanized = checked
+                }
+                ConfigSwitch {
+                    text: qsTr("Show translated lyrics")
+                    checked: Settings.spicyLyricsTranslated
+                    onToggledTo: (checked) => Settings.spicyLyricsTranslated = checked
+                }
+                Item {
+                    width: parent.width
+                    implicitHeight: 52
+                    opacity: Settings.spicyLyricsTranslated ? 1 : 0.38
+
+                    StyledText {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.right: langButton.left
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("Translation language")
+                        elide: Text.ElideRight
+                    }
+
+                    TextButton {
+                        id: langButton
+                        anchors.right: parent.right
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        variant: TextButton.Tonal
+                        symbol: "language"
+                        enabled: Settings.spicyLyricsTranslated
+                        text: root.translationLanguageLabel(Settings.lyricsTranslationLanguage)
+                        onClicked: translationLangMenu.popup(langButton, 0, langButton.height + 4)
+                    }
+
+                    StyledMenu {
+                        id: translationLangMenu
+
+                        Instantiator {
+                            model: root.translationLanguages
+                            delegate: StyledMenuItem {
+                                required property var modelData
+                                text: String(modelData.label)
+                                checkmark: true
+                                checked: String(modelData.code) === Settings.lyricsTranslationLanguage
+                                onTriggered: Settings.lyricsTranslationLanguage = String(modelData.code)
+                            }
+                            onObjectAdded: (index, object) => translationLangMenu.insertItem(index, object as StyledMenuItem)
+                            onObjectRemoved: (index, object) => translationLangMenu.removeItem(object as StyledMenuItem)
+                        }
+                    }
                 }
                 NoteText {
                     text: qsTr("Paste your own client key from Spicy Lyrics to enable syllable-synced lyrics in the immersive player. Cached lyrics expire after 30 days, and Spotify lyrics are used as a fallback.")
