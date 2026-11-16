@@ -56,7 +56,7 @@ Item {
     ]
 
     function translationLanguageLabel(code: string): string {
-        for (let i: int = 0; i < translationLanguages.length; ++i) {
+        for (let i = 0; i < translationLanguages.length; ++i) {
             if (translationLanguages[i].code === code) {
                 return String(translationLanguages[i].label)
             }

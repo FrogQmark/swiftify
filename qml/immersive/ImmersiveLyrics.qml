@@ -126,10 +126,10 @@ Item {
         implicitHeight: contentHeight
         height: contentHeight
 
-        function splitLetters(text: string): var {
+        function splitLetters(text: string) {
             // Avoid splitting complex Arabic/Indic shaping or combining marks mid-cluster
-            for (let i: int = 0; i < text.length; ++i) {
-                const code: int = text.charCodeAt(i)
+            for (let i = 0; i < text.length; ++i) {
+                const code = text.charCodeAt(i)
                 if ((code >= 0x0590 && code <= 0x06FF) || (code >= 0x0900 && code <= 0x0DFF) || (code >= 0x0300 && code <= 0x036F)) {
                     return []
                 }
@@ -138,23 +138,23 @@ Item {
         }
 
         function layoutWords() {
-            const maxWidth: real = width
-            const total: int = wordRepeater.count
+            const maxWidth = width
+            const total = wordRepeater.count
             if (maxWidth <= 0 || total <= 0) {
                 contentHeight = 0
                 return
             }
-            let y: real = 0
-            let rowStart: int = 0
-            let rowWidth: real = 0
-            let rowHeight: real = 0
-            let rowCount: int = 0
+            let y = 0
+            let rowStart = 0
+            let rowWidth = 0
+            let rowHeight = 0
+            let rowCount = 0
 
-            for (let i: int = 0; i <= total; ++i) {
-                let itemWidth: real = 0
-                let itemHeight: real = 0
-                let hasItem: bool = false
-                let flush: bool = (i === total)
+            for (let i = 0; i <= total; ++i) {
+                let itemWidth = 0
+                let itemHeight = 0
+                let hasItem = false
+                let flush = (i === total)
                 if (i < total) {
                     const probe = wordRepeater.itemAt(i)
                     if (probe) {
@@ -167,8 +167,8 @@ Item {
                     }
                 }
                 if (flush && rowCount > 0) {
-                    let x: real = rightAligned ? Math.max(0, maxWidth - rowWidth) : 0
-                    for (let j: int = rowStart; j < i; ++j) {
+                    let x = rightAligned ? Math.max(0, maxWidth - rowWidth) : 0
+                    for (let j = rowStart; j < i; ++j) {
                         const word = wordRepeater.itemAt(j)
                         if (word) {
                             word.x = x
