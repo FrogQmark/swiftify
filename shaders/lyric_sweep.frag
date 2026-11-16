@@ -30,6 +30,9 @@ layout(std140, binding = 0) uniform buf {
     float feather;
     float baseAlpha;
     float glowBoost;
+    float vertical;
+    float spanStart;
+    float spanEnd;
 };
 
 layout(binding = 1) uniform sampler2D source;
@@ -37,12 +40,14 @@ layout(binding = 1) uniform sampler2D source;
 void main()
 {
     vec4 tex = texture(source, qt_TexCoord0);
+    float rawCoord = vertical > 0.5 ? qt_TexCoord0.y : qt_TexCoord0.x;
+    float coord = clamp((rawCoord - spanStart) / max(spanEnd - spanStart, 0.01), 0.0, 1.0);
     float t = clamp(progress, 0.0, 1.0);
     float f = max(feather, 0.02);
     float head = mix(-f, 1.0 + f, t);
-    float lit = 1.0 - smoothstep(head - f, head + f, qt_TexCoord0.x);
+    float lit = 1.0 - smoothstep(head - f, head + f, coord);
 
-    float d = (qt_TexCoord0.x - head) / max(f * 0.75, 0.04);
+    float d = (coord - head) / max(f * 0.75, 0.04);
     float activeEdge = sin(t * 3.14159265);
     float edgeGlow = exp(-(d * d)) * activeEdge * glowBoost;
 

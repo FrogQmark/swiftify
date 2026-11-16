@@ -853,6 +853,10 @@ private slots:
         QCOMPARE(wordGroups.at(0).toList().size(), 2);
         QCOMPARE(wordGroups.at(1).toList().size(), 1);
         QCOMPARE(model.data(model.index(1), LyricsModel::TranslatedWordsRole).toString(), QStringLiteral("Olá mundo"));
+        const QVariantList transGroups = model.data(model.index(1), LyricsModel::TranslationWordGroupsRole).toList();
+        QCOMPARE(transGroups.size(), 2);
+        QCOMPARE(transGroups.at(0).toList().first().toMap().value(QStringLiteral("text")).toString(), QStringLiteral("Olá"));
+        QCOMPARE(transGroups.at(1).toList().first().toMap().value(QStringLiteral("text")).toString(), QStringLiteral("mundo"));
         QCOMPARE(model.data(model.index(3), LyricsModel::RomanizedWordsRole).toString(), QStringLiteral("bakku"));
     }
 
@@ -876,6 +880,26 @@ private slots:
         QVERIFY(SpicyLyricsClient::parseTranslateResponse(payload, &translated, &romanized));
         QCOMPARE(translated, QStringLiteral("Hello\nWorld"));
         QCOMPARE(romanized, QStringLiteral("Kon'nichiwa\nSekai"));
+
+        // Metadata language arrays at root[8] must never be mistaken for romanization.
+        const QByteArray withMetadata = R"([
+            [
+                ["Hello", "Hello", null, null, 10]
+            ],
+            null,
+            "en",
+            null,
+            null,
+            null,
+            1.0,
+            [],
+            [["en"], null, [1.0], ["en"]]
+        ])";
+        QString metaTranslated;
+        QString metaRomanized;
+        QVERIFY(SpicyLyricsClient::parseTranslateResponse(withMetadata, &metaTranslated, &metaRomanized));
+        QCOMPARE(metaTranslated, QStringLiteral("Hello"));
+        QVERIFY(metaRomanized.isEmpty());
     }
 
     void spicyLyricsCacheExpiresAfterThirtyDays()

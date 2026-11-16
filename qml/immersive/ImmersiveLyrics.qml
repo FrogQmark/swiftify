@@ -90,6 +90,9 @@ Item {
                 property real feather: glyph.feather
                 property real baseAlpha: 0.36
                 property real glowBoost: glyph.glowStrength
+                property real vertical: 0.0
+                property real spanStart: 0.0
+                property real spanEnd: 1.0
                 fragmentShader: "qrc:/shaders/lyric_sweep.frag.qsb"
             }
         }
@@ -122,6 +125,8 @@ Item {
         property real spacingX: 9
         property real spacingY: 4
         property bool enableLift: true
+        property int longSyllableMinMs: 750
+        readonly property real liftFactor: Math.max(0.55, fontSize / 30.0)
         property real contentHeight: 0
 
         implicitHeight: contentHeight
@@ -224,14 +229,14 @@ Item {
                             : !wrapBox.lineActive ? (root.displayPositionMs >= endMs ? 1 : 0)
                             : Math.max(0, Math.min(1, (root.displayPositionMs - startMs) / durationMs))
                         readonly property bool singing: wrapBox.lineActive && progress > 0 && progress < 1
-                        readonly property bool longSyllable: wrapBox.enableLift && durationMs >= 750 && sylText.length > 1
+                        readonly property bool longSyllable: wrapBox.enableLift && durationMs >= wrapBox.longSyllableMinMs && sylText.length > 1
                             && !Appearance.reduceMotion && !Appearance.performanceMode
                         readonly property var letters: longSyllable ? wrapBox.splitLetters(sylText) : []
                         readonly property bool useLetters: letters.length > 1
 
                         property real wordGlow: !Appearance.performanceMode && wrapBox.lineActive && singing ? 1.0 : 0.0
                         property real lift: (wrapBox.enableLift && !useLetters && !Appearance.reduceMotion && !Appearance.performanceMode && wrapBox.lineActive)
-                            ? (singing ? -2.0 : (progress >= 1 ? -0.5 : 0))
+                            ? (singing ? -2.0 * wrapBox.liftFactor : (progress >= 1 ? -0.5 * wrapBox.liftFactor : 0))
                             : 0
                         property real wordScale: (wrapBox.enableLift && !useLetters && !Appearance.reduceMotion && !Appearance.performanceMode && wrapBox.lineActive && singing)
                             ? 1.04 : 1.0
@@ -289,10 +294,10 @@ Item {
 
                                     property real letterGlow: activeLetter ? 1.0 : (wrapBox.lineActive && sylItem.singing && lProgress >= 1 ? 0.55 : 0.0)
                                     property real letterLift: wrapBox.lineActive && sylItem.singing
-                                        ? (-5.5 * wave - (lProgress >= 1 ? 1.5 : 0))
-                                        : (wrapBox.lineActive && sylItem.progress >= 1 ? -0.5 : 0)
+                                        ? ((-5.5 * wave - (lProgress >= 1 ? 1.5 : 0)) * wrapBox.liftFactor)
+                                        : (wrapBox.lineActive && sylItem.progress >= 1 ? -0.5 * wrapBox.liftFactor : 0)
                                     property real letterScale: wrapBox.lineActive && sylItem.singing
-                                        ? (1.0 + 0.18 * wave + 0.04) : 1.0
+                                        ? (1.0 + 0.16 * wave + 0.03) : 1.0
 
                                     implicitWidth: letterGlyph.implicitWidth
                                     implicitHeight: letterGlyph.implicitHeight
@@ -460,6 +465,7 @@ Item {
             required property int endTimeMs
             required property string romanizedWords
             required property string translatedWords
+            required property var translationWordGroups
             required property bool oppositeAligned
             required property bool instrumental
             required property var wordGroups
@@ -469,7 +475,11 @@ Item {
             readonly property bool hasSyllables: !instrumental && wordGroups !== undefined && wordGroups !== null && wordGroups.length > 0
             readonly property bool hasRomanized: !instrumental && Settings.spicyLyricsRomanized && romanizedWords.length > 0
             readonly property bool hasTranslation: !instrumental && Settings.spicyLyricsTranslated && translatedWords.length > 0
+            readonly property bool hasTranslationWords: hasTranslation && translationWordGroups !== undefined && translationWordGroups !== null && translationWordGroups.length > 0
             readonly property bool hasBackground: !instrumental && backgroundVocals !== undefined && backgroundVocals !== null && backgroundVocals.length > 0
+            readonly property real lineProgress: !Player.lyricsSynchronized ? 1
+                : !active ? (root.displayPositionMs >= endTimeMs ? 1 : 0)
+                : Math.max(0, Math.min(1, (root.displayPositionMs - startTimeMs) / Math.max(1, endTimeMs - startTimeMs)))
             readonly property int distanceFromActive: Player.activeLyricIndex >= 0 ? Math.abs(index - Player.activeLyricIndex) : 0
             readonly property bool nearViewport: distanceFromActive <= 6
 
@@ -575,7 +585,7 @@ Item {
                     blurMax: 24
                 }
 
-                // Kept visible for line-synced / unsynced lyrics and tests
+                // Line-synced top-to-bottom progression & unsynced/test label
                 StyledText {
                     id: label
                     objectName: "lyricText"
@@ -592,6 +602,28 @@ Item {
                     font.pixelSize: 30
                     font.weight: Font.Bold
                     color: "white"
+                    opacity: (layer.enabled || !line.active || !Player.lyricsSynchronized
+                        || (!Player.playing && root.displayPositionMs === 0)
+                        || line.lineProgress >= 1) ? 1.0 : 0.36
+
+                    layer.enabled: line.active && !line.hasSyllables && !line.instrumental
+                        && Player.lyricsSynchronized && !Appearance.performanceMode
+                        && line.lineProgress > 0 && line.lineProgress < 1
+                    layer.smooth: true
+                    layer.textureSize: Qt.size(Math.max(1, Math.ceil(Math.max(label.width, label.implicitWidth) * root.renderScale * 2.0)),
+                                               Math.max(1, Math.ceil(Math.max(label.height, label.implicitHeight) * root.renderScale * 2.0)))
+                    layer.effect: ShaderEffect {
+                        property variant source
+                        property color glowColor: Qt.rgba(PlayerStyle.primary.r, PlayerStyle.primary.g, PlayerStyle.primary.b, 1.0)
+                        property real progress: line.lineProgress
+                        property real feather: 0.28
+                        property real baseAlpha: 0.36
+                        property real glowBoost: 0.55
+                        property real vertical: 1.0
+                        property real spanStart: Math.min(0.4, label.topPadding / Math.max(1, label.height))
+                        property real spanEnd: Math.max(spanStart + 0.1, 1.0 - label.bottomPadding / Math.max(1, label.height))
+                        fragmentShader: "qrc:/shaders/lyric_sweep.frag.qsb"
+                    }
                 }
 
                 // Syllable-by-syllable karaoke layout (grouped by whole words so lines never split mid-word)
@@ -666,8 +698,23 @@ Item {
                         opacity: 0.72
                     }
 
+                    SyllableLines {
+                        id: translationSyllables
+                        visible: line.hasTranslationWords
+                        width: parent.width
+                        wordGroupsModel: line.hasTranslationWords ? line.translationWordGroups : []
+                        rightAligned: line.oppositeAligned
+                        lineActive: line.active
+                        fontSize: 17
+                        fontWeight: Font.Medium
+                        spacingX: 6
+                        spacingY: 3
+                        enableLift: true
+                        longSyllableMinMs: 950
+                    }
+
                     StyledText {
-                        visible: line.hasTranslation
+                        visible: line.hasTranslation && !line.hasTranslationWords
                         width: parent.width
                         text: line.translatedWords
                         wrapMode: Text.Wrap
@@ -689,13 +736,20 @@ Item {
                             readonly property string bgRomanized: modelData && modelData.romanizedWords ? String(modelData.romanizedWords) : ""
                             readonly property bool showBgRomanized: Settings.spicyLyricsRomanized && bgRomanized.length > 0
                             readonly property string bgTranslated: modelData && modelData.translatedWords ? String(modelData.translatedWords) : ""
+                            readonly property var bgTranslationWordGroups: modelData && modelData.translationWordGroups ? modelData.translationWordGroups : []
                             readonly property bool showBgTranslated: Settings.spicyLyricsTranslated && bgTranslated.length > 0
+                            readonly property bool hasBgTranslationWords: showBgTranslated && bgTranslationWordGroups !== undefined && bgTranslationWordGroups !== null && bgTranslationWordGroups.length > 0
+                            readonly property real bgStartMs: modelData ? Number(modelData.startTimeMs) : 0
+                            readonly property real bgEndMs: Math.max(bgStartMs + 1, modelData ? Number(modelData.endTimeMs) : 1)
+                            readonly property real bgProgress: !Player.lyricsSynchronized ? 1
+                                : !line.active ? (root.displayPositionMs >= bgEndMs ? 1 : 0)
+                                : Math.max(0, Math.min(1, (root.displayPositionMs - bgStartMs) / Math.max(1, bgEndMs - bgStartMs)))
 
                             width: extraCol.width
                             height: (hasBgSyllables ? bgSyllables.implicitHeight : bgText.implicitHeight)
                                 + (showBgRomanized ? bgRomText.implicitHeight + 4 : 0)
-                                + (showBgTranslated ? bgTransText.implicitHeight + 4 : 0)
-                            opacity: 0.75
+                                + (showBgTranslated ? ((hasBgTranslationWords ? bgTransSyllables.implicitHeight : bgTransText.implicitHeight) + 4) : 0)
+                            opacity: 0.78
 
                             StyledText {
                                 id: bgText
@@ -707,6 +761,28 @@ Item {
                                 font.pixelSize: 20
                                 font.weight: Font.DemiBold
                                 color: "white"
+                                opacity: (layer.enabled || !line.active || !Player.lyricsSynchronized
+                                    || (!Player.playing && root.displayPositionMs === 0)
+                                    || bgItem.bgProgress >= 1) ? 1.0 : 0.36
+
+                                layer.enabled: line.active && !bgItem.hasBgSyllables
+                                    && Player.lyricsSynchronized && !Appearance.performanceMode
+                                    && bgItem.bgProgress > 0 && bgItem.bgProgress < 1
+                                layer.smooth: true
+                                layer.textureSize: Qt.size(Math.max(1, Math.ceil(Math.max(bgText.width, bgText.implicitWidth) * root.renderScale * 2.0)),
+                                                           Math.max(1, Math.ceil(Math.max(bgText.height, bgText.implicitHeight) * root.renderScale * 2.0)))
+                                layer.effect: ShaderEffect {
+                                    property variant source
+                                    property color glowColor: Qt.rgba(PlayerStyle.primary.r, PlayerStyle.primary.g, PlayerStyle.primary.b, 1.0)
+                                    property real progress: bgItem.bgProgress
+                                    property real feather: 0.28
+                                    property real baseAlpha: 0.36
+                                    property real glowBoost: 0.45
+                                    property real vertical: 1.0
+                                    property real spanStart: 0.0
+                                    property real spanEnd: 1.0
+                                    fragmentShader: "qrc:/shaders/lyric_sweep.frag.qsb"
+                                }
                             }
 
                             SyllableLines {
@@ -720,7 +796,7 @@ Item {
                                 fontWeight: Font.DemiBold
                                 spacingX: 7
                                 spacingY: 3
-                                enableLift: false
+                                enableLift: true
                             }
 
                             StyledText {
@@ -737,9 +813,26 @@ Item {
                                 opacity: 0.7
                             }
 
+                            SyllableLines {
+                                id: bgTransSyllables
+                                visible: bgItem.hasBgTranslationWords
+                                width: parent.width
+                                y: (bgItem.hasBgSyllables ? bgSyllables.implicitHeight : bgText.implicitHeight)
+                                    + (bgItem.showBgRomanized ? bgRomText.implicitHeight + 4 : 0) + 4
+                                wordGroupsModel: bgItem.hasBgTranslationWords ? bgItem.bgTranslationWordGroups : []
+                                rightAligned: line.oppositeAligned
+                                lineActive: line.active
+                                fontSize: 15
+                                fontWeight: Font.Normal
+                                spacingX: 5
+                                spacingY: 2
+                                enableLift: true
+                                longSyllableMinMs: 950
+                            }
+
                             StyledText {
                                 id: bgTransText
-                                visible: bgItem.showBgTranslated
+                                visible: bgItem.showBgTranslated && !bgItem.hasBgTranslationWords
                                 width: parent.width
                                 y: (bgItem.hasBgSyllables ? bgSyllables.implicitHeight : bgText.implicitHeight)
                                     + (bgItem.showBgRomanized ? bgRomText.implicitHeight + 4 : 0) + 4

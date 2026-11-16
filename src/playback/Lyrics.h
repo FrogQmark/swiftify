@@ -96,6 +96,7 @@ public:
         EndTimeMsRole,
         RomanizedWordsRole,
         TranslatedWordsRole,
+        TranslationWordGroupsRole,
         OppositeAlignedRole,
         InstrumentalRole,
         WordGroupsRole,

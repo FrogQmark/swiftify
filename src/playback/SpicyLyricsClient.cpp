@@ -98,6 +98,10 @@ void readEnrichCache(const QString &path, QHash<QString, QString> &translations,
         return;
     }
     const QJsonObject root = doc.object();
+    if (root.value(QStringLiteral("cacheVersion")).toInt() != 2) {
+        QFile::remove(path);
+        return;
+    }
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
     const qint64 cachedAtMs = qint64(root.value(QStringLiteral("cachedAtMs")).toDouble());
     if (cachedAtMs <= 0 || cachedAtMs > nowMs + 60'000 || nowMs - cachedAtMs >= SpicyLyricsCache::kMaxCacheAgeMs) {
@@ -127,6 +131,7 @@ void writeEnrichCache(const QString &path, const QHash<QString, QString> &transl
         return obj;
     };
     QJsonObject root;
+    root.insert(QStringLiteral("cacheVersion"), 2);
     root.insert(QStringLiteral("cachedAtMs"), double(QDateTime::currentMSecsSinceEpoch()));
     root.insert(QStringLiteral("translations"), saveMap(translations));
     root.insert(QStringLiteral("romanizations"), saveMap(romanizations));
@@ -147,7 +152,7 @@ void applyEnrichmentToLyrics(Lyrics &lyrics, bool applyRomanized, bool applyTran
             continue;
         }
         const QString clean = normalizeLine(line.words);
-        if (applyRomanized && line.romanizedWords.isEmpty()) {
+        if (applyRomanized && line.romanizedWords.isEmpty() && SpicyLyricsClient::containsNonLatinLetters(line.words)) {
             const QString rom = romanizations.value(clean);
             if (!rom.isEmpty() && rom.compare(line.words, Qt::CaseInsensitive) != 0) {
                 line.romanizedWords = rom;
@@ -165,7 +170,7 @@ void applyEnrichmentToLyrics(Lyrics &lyrics, bool applyRomanized, bool applyTran
         }
         for (LyricVocalGroup &bg : line.backgroundVocals) {
             const QString bgClean = normalizeLine(bg.words);
-            if (applyRomanized && bg.romanizedWords.isEmpty()) {
+            if (applyRomanized && bg.romanizedWords.isEmpty() && SpicyLyricsClient::containsNonLatinLetters(bg.words)) {
                 const QString rom = romanizations.value(bgClean);
                 if (!rom.isEmpty() && rom.compare(bg.words, Qt::CaseInsensitive) != 0) {
                     bg.romanizedWords = rom;
@@ -457,29 +462,8 @@ bool SpicyLyricsClient::parseTranslateResponse(const QByteArray &json, QString *
             translated += seg.at(0).toString();
         } else if (seg.size() >= 4 && seg.at(0).isNull()) {
             const QString srcRom = seg.at(3).toString();
-            const QString tgtRom = seg.at(2).toString();
-            romanized += !srcRom.isEmpty() ? srcRom : tgtRom;
-        }
-    }
-
-    if (romanized.isEmpty()) {
-        for (qsizetype idx = 3; idx < root.size(); ++idx) {
-            if (!root.at(idx).isArray()) {
-                continue;
-            }
-            const QJsonArray extra = root.at(idx).toArray();
-            if (!extra.isEmpty() && extra.at(0).isArray()) {
-                QString candidate;
-                for (const QJsonValue &pairVal : extra) {
-                    const QJsonArray pair = pairVal.toArray();
-                    if (!pair.isEmpty() && pair.at(0).isString()) {
-                        candidate += pair.at(0).toString();
-                    }
-                }
-                if (!candidate.isEmpty()) {
-                    romanized = candidate;
-                    break;
-                }
+            if (!srcRom.isEmpty()) {
+                romanized += srcRom;
             }
         }
     }

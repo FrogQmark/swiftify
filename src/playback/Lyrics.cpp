@@ -131,6 +131,9 @@ LyricVocalGroup parseVocalGroup(const QJsonObject &object)
         group.words = firstString(object, {"Text", "text"}).trimmed();
         group.romanizedWords = groupRomanized;
     }
+    if (!group.romanizedWords.isEmpty() && group.romanizedWords.compare(group.words, Qt::CaseInsensitive) == 0) {
+        group.romanizedWords.clear();
+    }
     return group;
 }
 
@@ -173,6 +176,56 @@ QVariantList buildWordGroups(const QList<LyricSyllable> &syllables)
         words.append(QVariant::fromValue(currentWord));
     }
     return words;
+}
+
+QVariantList buildTimedWordGroups(const QString &text, quint32 startTimeMs, quint32 endTimeMs,
+                                  const QList<LyricSyllable> &anchorSyllables = {})
+{
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty()) {
+        return {};
+    }
+    quint32 spanStart = startTimeMs;
+    quint32 spanEnd = endTimeMs;
+    if (!anchorSyllables.isEmpty() && anchorSyllables.last().endTimeMs > anchorSyllables.first().startTimeMs) {
+        spanStart = anchorSyllables.first().startTimeMs;
+        spanEnd = anchorSyllables.last().endTimeMs;
+    }
+    if (spanEnd <= spanStart) {
+        return {};
+    }
+
+    static const QRegularExpression whitespace(QStringLiteral("\\s+"));
+    const QStringList tokens = trimmed.split(whitespace, Qt::SkipEmptyParts);
+    if (tokens.isEmpty()) {
+        return {};
+    }
+
+    double totalWeight = 0.0;
+    QList<double> weights;
+    weights.reserve(tokens.size());
+    for (const QString &token : tokens) {
+        const double w = double(std::max<qsizetype>(2, token.size() + 1));
+        weights.append(w);
+        totalWeight += w;
+    }
+
+    const double span = double(spanEnd - spanStart);
+    double acc = 0.0;
+    QVariantList groups;
+    groups.reserve(tokens.size());
+    for (qsizetype i = 0; i < tokens.size(); ++i) {
+        const quint32 wStart = spanStart + quint32(std::llround(span * (acc / totalWeight)));
+        acc += weights.at(i);
+        const quint32 wEnd = std::max(wStart + 1, spanStart + quint32(std::llround(span * (acc / totalWeight))));
+
+        QVariantMap map;
+        map.insert(QStringLiteral("text"), tokens.at(i));
+        map.insert(QStringLiteral("startTimeMs"), int(wStart));
+        map.insert(QStringLiteral("endTimeMs"), int(wEnd));
+        groups.append(QVariant::fromValue(QVariantList {map}));
+    }
+    return groups;
 }
 
 } // namespace
@@ -472,6 +525,8 @@ QVariant LyricsModel::data(const QModelIndex &index, int role) const
     case EndTimeMsRole: return line.endTimeMs;
     case RomanizedWordsRole: return line.romanizedWords;
     case TranslatedWordsRole: return line.translatedWords;
+    case TranslationWordGroupsRole:
+        return buildTimedWordGroups(line.translatedWords, line.startTimeMs, line.endTimeMs, line.syllables);
     case OppositeAlignedRole: return line.oppositeAligned;
     case InstrumentalRole: return line.instrumental;
     case WordGroupsRole: return buildWordGroups(line.syllables);
@@ -482,6 +537,8 @@ QVariant LyricsModel::data(const QModelIndex &index, int role) const
             entry.insert(QStringLiteral("words"), bg.words);
             entry.insert(QStringLiteral("romanizedWords"), bg.romanizedWords);
             entry.insert(QStringLiteral("translatedWords"), bg.translatedWords);
+            entry.insert(QStringLiteral("translationWordGroups"),
+                         buildTimedWordGroups(bg.translatedWords, bg.startTimeMs, bg.endTimeMs, bg.syllables));
             entry.insert(QStringLiteral("startTimeMs"), int(bg.startTimeMs));
             entry.insert(QStringLiteral("endTimeMs"), int(bg.endTimeMs));
             entry.insert(QStringLiteral("wordGroups"), buildWordGroups(bg.syllables));
@@ -501,6 +558,7 @@ QHash<int, QByteArray> LyricsModel::roleNames() const
         {EndTimeMsRole, "endTimeMs"},
         {RomanizedWordsRole, "romanizedWords"},
         {TranslatedWordsRole, "translatedWords"},
+        {TranslationWordGroupsRole, "translationWordGroups"},
         {OppositeAlignedRole, "oppositeAligned"},
         {InstrumentalRole, "instrumental"},
         {WordGroupsRole, "wordGroups"},
