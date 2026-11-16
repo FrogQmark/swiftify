@@ -22,8 +22,10 @@
 #include "app/Settings.h"
 #include "library/SongListModel.h"
 #include "playback/InteractionState.h"
+#include "playback/Lyrics.h"
 #include "playback/PlaybackController.h"
 #include "playback/PlaybackState.h"
+#include "playback/SpicyLyricsClient.h"
 #include "spotify/CredentialStore.h"
 #include "spotify/SpotifySession.h"
 #if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
@@ -777,6 +779,95 @@ private slots:
         QCOMPARE(mpris.playbackStatus(), QStringLiteral("Playing"));
     }
 #endif
+
+    void spicyLyricsParserHandlesSyllablesDuetsBackgroundAndBreaks()
+    {
+        const QByteArray payload = R"({
+            "Status": 200,
+            "Body": {
+                "id": "1QV6tiMFM6fSOKOGLMHYYg",
+                "Type": "Syllable",
+                "SongWriters": ["Writer A"],
+                "Content": [
+                    {
+                        "Type": "Vocal",
+                        "OppositeAligned": false,
+                        "Lead": {
+                            "StartTime": 6.0,
+                            "EndTime": 8.0,
+                            "Syllables": [
+                                { "Text": "Hel", "StartTime": 6.0, "EndTime": 6.4, "IsPartOfWord": true, "TransliteratedText": "hel" },
+                                { "Text": "lo", "StartTime": 6.4, "EndTime": 7.0, "IsPartOfWord": false, "TransliteratedText": "lo" },
+                                { "Text": "world", "StartTime": 7.1, "EndTime": 8.0, "IsPartOfWord": false, "TransliteratedText": "world" }
+                            ]
+                        },
+                        "Background": [
+                            {
+                                "StartTime": 7.2,
+                                "EndTime": 8.0,
+                                "Syllables": [
+                                    { "Text": "(oh)", "StartTime": 7.2, "EndTime": 8.0, "IsPartOfWord": false }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "Type": "Vocal",
+                        "OppositeAligned": true,
+                        "Lead": {
+                            "StartTime": 14.0,
+                            "EndTime": 16.0,
+                            "Syllables": [
+                                { "Text": "back", "StartTime": 14.0, "EndTime": 16.0, "IsPartOfWord": false }
+                            ]
+                        }
+                    }
+                ]
+            }
+        })";
+
+        const std::optional<Lyrics> parsed = Lyrics::fromSpicyJson(payload);
+        QVERIFY(parsed.has_value());
+        QCOMPARE(parsed->provider, QStringLiteral("Spicy Lyrics"));
+        QVERIFY(parsed->synchronized);
+        QCOMPARE(parsed->syncKind, Lyrics::SyncKind::Syllable);
+        QVERIFY(parsed->hasRomanized);
+        // Intro (0..6000) + line 1 (6000..8000) + gap (8000..14000) + line 2 (14000..16000)
+        QCOMPARE(parsed->lines.size(), 4);
+        QVERIFY(parsed->lines.at(0).instrumental);
+        QCOMPARE(parsed->lines.at(1).words, QStringLiteral("Hello world"));
+        QCOMPARE(parsed->lines.at(1).romanizedWords, QStringLiteral("hello world"));
+        QCOMPARE(parsed->lines.at(1).backgroundVocals.size(), 1);
+        QVERIFY(parsed->lines.at(2).instrumental);
+        QVERIFY(parsed->lines.at(3).oppositeAligned);
+
+        LyricsModel model;
+        model.setLines(parsed->lines);
+        const QVariantList wordGroups = model.data(model.index(1), LyricsModel::WordGroupsRole).toList();
+        QCOMPARE(wordGroups.size(), 2); // "Hello" (2 syllables) and "world" (1 syllable)
+        QCOMPARE(wordGroups.at(0).toList().size(), 2);
+        QCOMPARE(wordGroups.at(1).toList().size(), 1);
+    }
+
+    void spicyLyricsCacheExpiresAfterThirtyDays()
+    {
+        QTemporaryDir dir;
+        SpicyLyricsCache cache(dir.path());
+        const QString trackA = QStringLiteral("1QV6tiMFM6fSOKOGLMHYYg");
+        const QString trackB = QStringLiteral("2QV6tiMFM6fSOKOGLMHYYh");
+        const qint64 t0 = 1'700'000'000'000LL;
+
+        QVERIFY(cache.write(trackA, R"({"Body":{"Type":"Line","Content":[]}})", t0));
+        QVERIFY(cache.isFresh(trackA, t0 + SpicyLyricsCache::kMaxCacheAgeMs - 1));
+        QVERIFY(cache.readIfFresh(trackA, t0 + 1000).has_value());
+        QVERIFY(!cache.hasExpiredTrack({trackA, trackB}, t0 + 1000));
+        QCOMPARE(cache.staleTrackIds({trackA, trackB}, t0 + 1000), QStringList {trackB});
+
+        const qint64 tExpired = t0 + SpicyLyricsCache::kMaxCacheAgeMs;
+        QVERIFY(cache.hasExpiredTrack({trackA, trackB}, tExpired));
+        QVERIFY(!cache.readIfFresh(trackA, tExpired).has_value());
+        QVERIFY(!QFile::exists(cache.filePath(trackA)));
+    }
 };
 
 QTEST_GUILESS_MAIN(PlaybackTest)

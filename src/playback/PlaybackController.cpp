@@ -21,6 +21,7 @@
 #include "app/ErrorCenter.h"
 #include "app/Settings.h"
 #include "core/PlaybackCore.h"
+#include "spotify/SpotifyLink.h"
 #include "spotify/SpotifySession.h"
 #include "playback/PlaybackState.h"
 
@@ -56,7 +57,7 @@ constexpr quint32 kRestartThresholdMs = 3'000;
 } // namespace
 
 PlaybackController::PlaybackController(PlaybackCore *core, SpotifySession *session, Settings *settings,
-                                       ErrorCenter *errors, QObject *parent)
+                                       ErrorCenter *errors, QNetworkAccessManager *network, QObject *parent)
     : QObject(parent)
     , m_core(core)
     , m_session(session)
@@ -65,6 +66,7 @@ PlaybackController::PlaybackController(PlaybackCore *core, SpotifySession *sessi
     , m_upNext(new SongListModel(this))
     , m_previouslyPlayed(new SongListModel(this))
     , m_lyricsModel(new LyricsModel(this))
+    , m_spicyLyrics(network ? std::make_unique<SpicyLyricsClient>(network) : nullptr)
 {
     if (!s_instance) {
         s_instance = this;
@@ -94,6 +96,13 @@ PlaybackController::PlaybackController(PlaybackCore *core, SpotifySession *sessi
     connect(m_settings, &Settings::playerBarVisualizerChanged, this, updateVisualizers);
     connect(m_settings, &Settings::trackListVisualizerChanged, this, updateVisualizers);
     connect(m_settings, &Settings::immersiveVisualizerChanged, this, updateVisualizers);
+    const auto reloadCurrentLyrics = [this] {
+        if (m_currentSong && (!m_playbackNeedsLoad || m_playing || hasLyrics() || m_loadingLyrics)) {
+            loadLyrics(*m_currentSong);
+        }
+    };
+    connect(m_settings, &Settings::spicyLyricsEnabledChanged, this, reloadCurrentLyrics);
+    connect(m_settings, &Settings::spicyLyricsApiKeyChanged, this, reloadCurrentLyrics);
     connect(m_session, &SpotifySession::playbackConnected, this, [this] {
         try {
             m_core->setVolume(float(m_volume));
@@ -1349,11 +1358,28 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
         // beside it does
         lyrics = Lyrics::besideFile(song.localPath());
     } else {
-        try {
-            lyrics = Lyrics::fromJson((co_await m_core->lyricsJson(song.uri)).toUtf8());
-        } catch (const Cancelled &) {
+        if (m_spicyLyrics && m_settings->spicyLyricsEnabled()) {
+            const QString apiKey = m_settings->spicyLyricsApiKey().trimmed();
+            const std::optional<SpotifyLink> link = parseSpotifyLink(song.uri);
+            if (!apiKey.isEmpty() && link && link->kind == SpotifyLink::Kind::Track) {
+                if (const auto spicyJson = co_await m_spicyLyrics->fetchLyricsJson(link->id, apiKey)) {
+                    if (isCancelled(token) || !isCurrent(song)) {
+                        co_return;
+                    }
+                    lyrics = Lyrics::fromSpicyJson(*spicyJson);
+                }
+            }
+        }
+        if (isCancelled(token) || !isCurrent(song)) {
             co_return;
-        } catch (const SpotifyError &) {
+        }
+        if (!lyrics) {
+            try {
+                lyrics = Lyrics::fromJson((co_await m_core->lyricsJson(song.uri)).toUtf8());
+            } catch (const Cancelled &) {
+                co_return;
+            } catch (const SpotifyError &) {
+            }
         }
     }
     if (isCancelled(token) || !isCurrent(song)) {

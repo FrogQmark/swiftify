@@ -64,7 +64,7 @@ struct ViewRig {
     QNetworkAccessManager network;
     FakeCore core;
     SpotifySession session {&core, &credentials, &network, &errors};
-    PlaybackController player {&core, &session, &settings, &errors};
+    PlaybackController player {&core, &session, &settings, &errors, &network};
     DiscordPresence discord {&player, &settings};
     LibraryStore library {&session, &settings, &errors};
     AudioShaping sound {&core, &settings, &session};

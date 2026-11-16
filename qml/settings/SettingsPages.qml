@@ -832,6 +832,46 @@ Item {
                     text: qsTr("stats.fm only needs a public username. songs count here after 30 seconds (%1 so far) and are local only").arg(Stats.historyCount)
                 }
             }
+
+            ContentSection {
+                title: "Spicy Lyrics"
+                symbol: "lyrics"
+
+                ConfigSwitch {
+                    text: qsTr("Use Spicy Lyrics")
+                    checked: Settings.spicyLyricsEnabled
+                    onToggledTo: (checked) => Settings.spicyLyricsEnabled = checked
+                }
+                OutlinedTextField {
+                    id: spicyKey
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: qsTr("Spicy Lyrics Client Key")
+                    text: Settings.spicyLyricsApiKey
+                    onAccepted: Settings.spicyLyricsApiKey = text
+                    Connections {
+                        target: spicyKey.inputItem
+                        function onActiveFocusChanged() {
+                            if (!spicyKey.inputItem.activeFocus) Settings.spicyLyricsApiKey = spicyKey.text
+                        }
+                    }
+                }
+                ConfigSwitch {
+                    text: qsTr("Show romanized lyrics")
+                    enabled: Settings.spicyLyricsEnabled
+                    checked: Settings.spicyLyricsRomanized
+                    onToggledTo: (checked) => Settings.spicyLyricsRomanized = checked
+                }
+                NoteText {
+                    text: qsTr("Paste your own client key from Spicy Lyrics to enable syllable-synced lyrics in the immersive player. Cached lyrics expire after 30 days, and Spotify lyrics are used as a fallback.")
+                }
+                TextButton {
+                    x: 8
+                    text: qsTr("Open Spicy Lyrics Developer Portal")
+                    variant: TextButton.Text
+                    onClicked: Qt.openUrlExternally("https://developers.spicylyrics.org")
+                }
+            }
         }
 
         Page {

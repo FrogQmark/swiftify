@@ -22,6 +22,7 @@
 #include "library/SongListModel.h"
 #include "playback/InteractionState.h"
 #include "playback/Lyrics.h"
+#include "playback/SpicyLyricsClient.h"
 #include "spotify/SpotifyTypes.h"
 
 #include <QDateTime>
@@ -31,8 +32,10 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <limits>
+#include <memory>
 #include <optional>
 
+class QNetworkAccessManager;
 class QQmlEngine;
 class QJSEngine;
 
@@ -74,6 +77,8 @@ class PlaybackController : public QObject {
     Q_PROPERTY(swiftify::LyricsModel *lyrics READ lyrics CONSTANT FINAL)
     Q_PROPERTY(bool hasLyrics READ hasLyrics NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(bool lyricsSynchronized READ lyricsSynchronized NOTIFY lyricsChanged FINAL)
+    Q_PROPERTY(bool lyricsSyllableSynced READ lyricsSyllableSynced NOTIFY lyricsChanged FINAL)
+    Q_PROPERTY(bool hasRomanizedLyrics READ hasRomanizedLyrics NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(QString lyricsProvider READ lyricsProvider NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(bool loadingLyrics READ isLoadingLyrics NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(QString lyricsMessage READ lyricsMessage NOTIFY lyricsChanged FINAL)
@@ -100,7 +105,7 @@ public:
     Q_ENUM(RepeatMode)
 
     PlaybackController(PlaybackCore *core, SpotifySession *session, Settings *settings, ErrorCenter *errors,
-                       QObject *parent = nullptr);
+                       QNetworkAccessManager *network = nullptr, QObject *parent = nullptr);
     ~PlaybackController() override;
 
     static PlaybackController *instance();
@@ -135,6 +140,8 @@ public:
     LyricsModel *lyrics() const { return m_lyricsModel; }
     bool hasLyrics() const { return m_lyrics.has_value(); }
     bool lyricsSynchronized() const { return m_lyrics && m_lyrics->synchronized; }
+    bool lyricsSyllableSynced() const { return m_lyrics && m_lyrics->syncKind == Lyrics::SyncKind::Syllable; }
+    bool hasRomanizedLyrics() const { return m_lyrics && m_lyrics->hasRomanized; }
     QString lyricsProvider() const { return m_lyrics ? m_lyrics->provider : QString(); }
     bool isLoadingLyrics() const { return m_loadingLyrics; }
     QString lyricsMessage() const { return m_lyricsMessage; }
@@ -332,6 +339,7 @@ private:
     RepeatMode m_repeatMode = RepeatMode::Off;
 
     LyricsModel *m_lyricsModel;
+    std::unique_ptr<SpicyLyricsClient> m_spicyLyrics;
     std::optional<Lyrics> m_lyrics;
     TaskSlot m_lyricsRequest;
     bool m_loadingLyrics = false;

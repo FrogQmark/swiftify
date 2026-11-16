@@ -204,6 +204,9 @@ void Settings::load()
     if (QRegularExpression(QStringLiteral("^[0-9]{17,20}$")).match(id).hasMatch()) {
         m_discordApplicationId = id;
     }
+    m_spicyLyricsEnabled = stored<bool>(m_store, "spicyLyricsEnabled", m_spicyLyricsEnabled);
+    m_spicyLyricsApiKey = stored<QString>(m_store, "spicyLyricsApiKey", {}).trimmed();
+    m_spicyLyricsRomanized = stored<bool>(m_store, "spicyLyricsRomanized", m_spicyLyricsRomanized);
     const QString configuredLanguage = oneOf(
         stored<QString>(m_store, "language", m_language),
         {QStringLiteral("system"), QStringLiteral("en"), QStringLiteral("ru"), QStringLiteral("de")},
@@ -623,6 +626,31 @@ void Settings::setDiscordApplicationId(const QString &raw)
     m_discordApplicationId = value;
     m_store.setValue(QStringLiteral("discordApplicationId"), value);
     emit discordApplicationIdChanged();
+}
+
+void Settings::setSpicyLyricsEnabled(bool value)
+{
+    if (m_spicyLyricsEnabled == value) return;
+    m_spicyLyricsEnabled = value;
+    m_store.setValue(QStringLiteral("spicyLyricsEnabled"), value);
+    emit spicyLyricsEnabledChanged();
+}
+
+void Settings::setSpicyLyricsApiKey(const QString &raw)
+{
+    const QString value = raw.trimmed();
+    if (m_spicyLyricsApiKey == value) return;
+    m_spicyLyricsApiKey = value;
+    m_store.setValue(QStringLiteral("spicyLyricsApiKey"), value);
+    emit spicyLyricsApiKeyChanged();
+}
+
+void Settings::setSpicyLyricsRomanized(bool value)
+{
+    if (m_spicyLyricsRomanized == value) return;
+    m_spicyLyricsRomanized = value;
+    m_store.setValue(QStringLiteral("spicyLyricsRomanized"), value);
+    emit spicyLyricsRomanizedChanged();
 }
 void Settings::setLanguage(const QString &raw)
 {

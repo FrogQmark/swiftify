@@ -277,6 +277,38 @@ private slots:
         Settings reopened(path);
         QVERIFY(reopened.windowControlsOnRight());
     }
+
+    void spicyLyricsSettingsPersist()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("swiftify.conf"));
+        {
+            Settings settings(path);
+            QVERIFY(settings.spicyLyricsEnabled());
+            QVERIFY(settings.spicyLyricsApiKey().isEmpty());
+            QVERIFY(!settings.spicyLyricsRomanized());
+
+            QSignalSpy enabledSpy(&settings, &Settings::spicyLyricsEnabledChanged);
+            QSignalSpy keySpy(&settings, &Settings::spicyLyricsApiKeyChanged);
+            QSignalSpy romanizedSpy(&settings, &Settings::spicyLyricsRomanizedChanged);
+
+            settings.setSpicyLyricsEnabled(false);
+            settings.setSpicyLyricsEnabled(false);
+            settings.setSpicyLyricsApiKey(QStringLiteral("  sl_pk_test123  "));
+            settings.setSpicyLyricsApiKey(QStringLiteral("sl_pk_test123"));
+            settings.setSpicyLyricsRomanized(true);
+            settings.setSpicyLyricsRomanized(true);
+
+            QCOMPARE(enabledSpy.count(), 1);
+            QCOMPARE(keySpy.count(), 1);
+            QCOMPARE(romanizedSpy.count(), 1);
+            QCOMPARE(settings.spicyLyricsApiKey(), QStringLiteral("sl_pk_test123"));
+        }
+        Settings reopened(path);
+        QVERIFY(!reopened.spicyLyricsEnabled());
+        QCOMPARE(reopened.spicyLyricsApiKey(), QStringLiteral("sl_pk_test123"));
+        QVERIFY(reopened.spicyLyricsRomanized());
+    }
 };
 
 QTEST_GUILESS_MAIN(SettingsTest)

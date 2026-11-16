@@ -20,26 +20,56 @@
 
 #include <QAbstractListModel>
 #include <QString>
+#include <QStringList>
 #include <QtQml/qqmlregistration.h>
 
 #include <optional>
 
 namespace swiftify {
 
+struct LyricSyllable {
+    quint32 startTimeMs = 0;
+    quint32 endTimeMs = 0;
+    QString text;
+    QString romanizedText;
+    bool isPartOfWord = false;
+};
+
+struct LyricVocalGroup {
+    quint32 startTimeMs = 0;
+    quint32 endTimeMs = 0;
+    QString words;
+    QString romanizedWords;
+    QList<LyricSyllable> syllables;
+};
+
 struct LyricLine {
     quint32 startTimeMs = 0;
     quint32 endTimeMs = 0;
     QString words;
+    QString romanizedWords;
+    bool oppositeAligned = false;
+    bool instrumental = false;
+    QList<LyricSyllable> syllables;
+    QList<LyricVocalGroup> backgroundVocals;
 };
 
-/// spotify's color-lyrics, as the core returns them (SpotifyLyrics.swift)
+/// spotify's color-lyrics (SpotifyLyrics.swift), local .lrc files, or
+/// Spicy Lyrics payloads
 struct Lyrics {
+    enum class SyncKind { Unsynced, Line, Syllable };
+
     QString language;
     QString provider;
     bool synchronized = false;
+    SyncKind syncKind = SyncKind::Unsynced;
+    bool hasRomanized = false;
+    QStringList songWriters;
     QList<LyricLine> lines;
 
     static std::optional<Lyrics> fromJson(const QByteArray &json);
+    /// Spicy Lyrics v1 JSON payload (Syllable, Line, or Static)
+    static std::optional<Lyrics> fromSpicyJson(const QByteArray &json);
     /// an .lrc file's lines: "[01:02.50]words", timed when they carry times
     static std::optional<Lyrics> fromLrc(const QString &text);
     /// the .lrc kept beside a music file, with the same name
@@ -61,6 +91,11 @@ public:
         WordsRole = Qt::UserRole + 1,
         StartTimeMsRole,
         EndTimeMsRole,
+        RomanizedWordsRole,
+        OppositeAlignedRole,
+        InstrumentalRole,
+        WordGroupsRole,
+        BackgroundVocalsRole,
     };
 
     explicit LyricsModel(QObject *parent = nullptr);

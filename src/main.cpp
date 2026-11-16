@@ -327,7 +327,7 @@ int main(int argc, char *argv[])
     QObject::connect(&settings, &Settings::songCacheMegabytesChanged, &core, applyStreaming);
     KeychainCredentialStore credentials;
     SpotifySession session(&core, &credentials, &network, &errors);
-    PlaybackController player(&core, &session, &settings, &errors);
+    PlaybackController player(&core, &session, &settings, &errors, &network);
     DiscordPresence discord(&player, &settings);
     LibraryStore library(&session, &settings, &errors);
     library.attachPlayer(&player);

@@ -932,6 +932,55 @@ private slots:
         QVERIFY(glyphPixels > 100);
     }
 
+    void immersiveLyricsRendersSpicyFeatures()
+    {
+        Rig rig;
+        rig.settings.setSpicyLyricsRomanized(true);
+        QFile lyrics(rig.directory.filePath(QStringLiteral("sung.lrc")));
+        QVERIFY(lyrics.open(QIODevice::WriteOnly));
+        lyrics.write("[00:00.00]placeholder\n");
+        lyrics.close();
+        Song song;
+        song.uri = QUrl::fromLocalFile(rig.directory.filePath(QStringLiteral("sung.flac"))).toString();
+        song.durationMs = 200'000;
+        rig.player.play(song, {song});
+        Rig::settle();
+
+        LyricLine lead;
+        lead.startTimeMs = 0;
+        lead.endTimeMs = 4000;
+        lead.words = QStringLiteral("Hello world");
+        lead.romanizedWords = QStringLiteral("hello world");
+        lead.syllables = {
+            {0, 1000, QStringLiteral("Hel"), QStringLiteral("hel"), true},
+            {1000, 2000, QStringLiteral("lo"), QStringLiteral("lo"), false},
+            {2000, 4000, QStringLiteral("world"), QStringLiteral("world"), false},
+        };
+        LyricVocalGroup bg;
+        bg.startTimeMs = 2500;
+        bg.endTimeMs = 4000;
+        bg.words = QStringLiteral("(echo)");
+        lead.backgroundVocals.append(bg);
+
+        LyricLine duet;
+        duet.startTimeMs = 4500;
+        duet.endTimeMs = 7000;
+        duet.words = QStringLiteral("Back to you");
+        duet.oppositeAligned = true;
+
+        LyricLine breakLine;
+        breakLine.startTimeMs = 7500;
+        breakLine.endTimeMs = 15000;
+        breakLine.instrumental = true;
+
+        rig.player.lyrics()->setLines({lead, duet, breakLine});
+        const auto panel = rig.show(QStringLiteral("ImmersiveLyrics"));
+        QVERIFY(panel);
+        Rig::settle();
+        rig.render();
+        QVERIFY(panel->findChild<QQuickItem *>(QStringLiteral("immersiveLyricsList")));
+    }
+
     void collectionHeroKeepsPillButtonsWhileTheyFit()
     {
         Rig rig;
