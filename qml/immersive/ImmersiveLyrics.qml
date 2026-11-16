@@ -333,19 +333,32 @@ Item {
         }
     }
 
-    function syncDisplayPosition() {
-        anchorPositionMs = Player.livePositionMs
-        anchorWallMs = Date.now()
-        displayPositionMs = anchorPositionMs
+    function syncDisplayPosition(forceSnap: bool) {
+        const live = Player.livePositionMs
+        const now = Date.now()
+        if (forceSnap || !Player.playing || live + 350 < displayPositionMs || live > displayPositionMs + 1000) {
+            anchorPositionMs = live
+            anchorWallMs = now
+            displayPositionMs = live
+            return
+        }
+        // Keep displayPositionMs monotonic across 250ms polls so jitter never
+        // teleports syllable/letter sweeps backwards.
+        anchorPositionMs = live
+        anchorWallMs = now
+        if (live > displayPositionMs) {
+            displayPositionMs = live
+        }
     }
 
-    onVisibleChanged: syncDisplayPosition()
+    onVisibleChanged: syncDisplayPosition(true)
 
     Connections {
         target: Player
-        function onLivePositionMsChanged() { root.syncDisplayPosition() }
-        function onPlayingChanged() { root.syncDisplayPosition() }
-        function onLyricsChanged() { root.syncDisplayPosition() }
+        function onLivePositionChanged() { root.syncDisplayPosition(false) }
+        function onCurrentSongChanged() { root.syncDisplayPosition(true) }
+        function onPlayingChanged() { root.syncDisplayPosition(true) }
+        function onLyricsChanged() { root.syncDisplayPosition(false) }
     }
 
     Connections {
@@ -353,7 +366,10 @@ Item {
         enabled: root.visible && Player.playing && Player.lyricsSynchronized
         function onSpinChanged() {
             const elapsed = Math.max(0, Math.min(400, Date.now() - root.anchorWallMs))
-            root.displayPositionMs = root.anchorPositionMs + elapsed
+            const predicted = root.anchorPositionMs + elapsed
+            if (predicted > root.displayPositionMs) {
+                root.displayPositionMs = predicted
+            }
         }
     }
 
@@ -863,6 +879,7 @@ Item {
                     line.highlighted = true
                     flash.restart()
                     Player.seekToLyricLine(line.index)
+                    root.syncDisplayPosition(true)
                 }
             }
         }
