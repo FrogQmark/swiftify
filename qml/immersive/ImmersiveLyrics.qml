@@ -331,13 +331,13 @@ Item {
                                     delegate: Item {
                                         id: sylItem
                                         required property var modelData
-                                        readonly property real startMs: Number(modelData.startTimeMs)
-                                        readonly property real endMs: Math.max(startMs + 1, Number(modelData.endTimeMs))
+                                        readonly property real startMs: modelData ? Number(modelData.startTimeMs) : 0
+                                        readonly property real endMs: Math.max(startMs + 1, modelData ? Number(modelData.endTimeMs) : 1)
                                         readonly property real progress: !Player.lyricsSynchronized ? 1
                                             : !line.active ? (root.displayPositionMs >= endMs ? 1 : 0)
                                             : Math.max(0, Math.min(1, (root.displayPositionMs - startMs) / (endMs - startMs)))
                                         readonly property bool singing: line.active && progress > 0 && progress < 1
-                                        readonly property real lift: (!Appearance.reduceMotion && !Appearance.performanceMode && line.active)
+                                        property real lift: (!Appearance.reduceMotion && !Appearance.performanceMode && line.active)
                                             ? (singing ? -2.0 : (progress >= 1 ? -0.5 : 0))
                                             : 0
 
@@ -352,7 +352,7 @@ Item {
 
                                         StyledText {
                                             id: baseSyl
-                                            text: String(sylItem.modelData.text)
+                                            text: sylItem.modelData && sylItem.modelData.text !== undefined ? String(sylItem.modelData.text) : ""
                                             font.pixelSize: 30
                                             font.weight: Font.Bold
                                             color: "white"
@@ -366,7 +366,7 @@ Item {
                                             visible: line.active && width > 0
 
                                             StyledText {
-                                                text: String(sylItem.modelData.text)
+                                                text: sylItem.modelData && sylItem.modelData.text !== undefined ? String(sylItem.modelData.text) : ""
                                                 font.pixelSize: 30
                                                 font.weight: Font.Bold
                                                 color: "white"
@@ -483,8 +483,8 @@ Item {
                                             delegate: Item {
                                                 id: bgSylItem
                                                 required property var modelData
-                                                readonly property real startMs: Number(modelData.startTimeMs)
-                                                readonly property real endMs: Math.max(startMs + 1, Number(modelData.endTimeMs))
+                                                readonly property real startMs: modelData ? Number(modelData.startTimeMs) : 0
+                                                readonly property real endMs: Math.max(startMs + 1, modelData ? Number(modelData.endTimeMs) : 1)
                                                 readonly property real progress: !Player.lyricsSynchronized ? 1
                                                     : !line.active ? (root.displayPositionMs >= endMs ? 1 : 0)
                                                     : Math.max(0, Math.min(1, (root.displayPositionMs - startMs) / (endMs - startMs)))
@@ -494,7 +494,7 @@ Item {
 
                                                 StyledText {
                                                     id: baseBgSyl
-                                                    text: String(bgSylItem.modelData.text)
+                                                    text: bgSylItem.modelData && bgSylItem.modelData.text !== undefined ? String(bgSylItem.modelData.text) : ""
                                                     font.pixelSize: 20
                                                     font.weight: Font.DemiBold
                                                     color: "white"
@@ -508,7 +508,7 @@ Item {
                                                     visible: line.active && width > 0
 
                                                     StyledText {
-                                                        text: String(bgSylItem.modelData.text)
+                                                        text: bgSylItem.modelData && bgSylItem.modelData.text !== undefined ? String(bgSylItem.modelData.text) : ""
                                                         font.pixelSize: 20
                                                         font.weight: Font.DemiBold
                                                         color: "white"
