@@ -1053,7 +1053,7 @@ Item {
                             }
                         }
                         StyledText {
-                            text: qsTr("developed by addenator, the best programmer on earth. forked by FrogQmark")
+                            text: qsTr("developed by addenator, the best programmer on earth")
                             font.pixelSize: Appearance.fontSize.smaller
                             color: Appearance.colors.onSurfaceVariant
                         }

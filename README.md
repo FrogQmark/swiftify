@@ -4,8 +4,6 @@
 
 # Swiftify
 
-developed by shredos67/addenator, forked by FrogQmark
-
 a spotify player for desktop, built with Qt Quick on top of a Rust core that wraps [librespot](https://github.com/librespot-org/librespot)
 
 [![release](https://img.shields.io/github/v/release/swiftify-org/swiftify?style=for-the-badge&color=6750a4&labelColor=1d1b20)](https://github.com/swiftify-org/swiftify/releases/latest)
