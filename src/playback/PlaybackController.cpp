@@ -1388,17 +1388,18 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
     if (isCancelled(token) || !isCurrent(song)) {
         co_return;
     }
-    if (lyrics && m_spicyLyrics && (m_settings->spicyLyricsRomanized() || m_settings->spicyLyricsTranslated())) {
+    bool needsNetworkEnrich = false;
+    QString enrichCacheKey;
+    const bool wantRom = m_settings->spicyLyricsRomanized();
+    const bool wantTrans = m_settings->spicyLyricsTranslated();
+    const QString targetLang = m_settings->lyricsTranslationLanguage();
+
+    if (lyrics && m_spicyLyrics && (wantRom || wantTrans)) {
         const std::optional<SpotifyLink> link = parseSpotifyLink(song.uri);
-        const QString cacheKey = (link && link->kind == SpotifyLink::Kind::Track) ? link->id : song.uri;
-        co_await m_spicyLyrics->enrichLyrics(*lyrics, cacheKey,
-                                            m_settings->spicyLyricsRomanized(),
-                                            m_settings->spicyLyricsTranslated(),
-                                            m_settings->lyricsTranslationLanguage());
-        if (isCancelled(token) || !isCurrent(song)) {
-            co_return;
-        }
+        enrichCacheKey = (link && link->kind == SpotifyLink::Kind::Track) ? link->id : song.uri;
+        needsNetworkEnrich = m_spicyLyrics->applyCachedEnrichment(*lyrics, enrichCacheKey, wantRom, wantTrans, targetLang);
     }
+
     m_loadingLyrics = false;
     if (lyrics) {
         m_lyrics = std::move(lyrics);
@@ -1406,9 +1407,23 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
     } else {
         m_lyricsMessage = kCatchphrase;
     }
-    m_lyricsRequest.finish(token);
     emit lyricsChanged();
     updateActiveLyricLine();
+
+    if (needsNetworkEnrich && m_lyrics && m_spicyLyrics) {
+        Lyrics enriched = *m_lyrics;
+        const bool updated = co_await m_spicyLyrics->enrichLyrics(enriched, enrichCacheKey, wantRom, wantTrans, targetLang);
+        if (isCancelled(token) || !isCurrent(song) || !m_lyrics) {
+            co_return;
+        }
+        if (updated) {
+            m_lyrics = std::move(enriched);
+            m_lyricsModel->setLines(m_lyrics->lines);
+            emit lyricsChanged();
+            updateActiveLyricLine();
+        }
+    }
+    m_lyricsRequest.finish(token);
 }
 
 void PlaybackController::updateActiveLyricLine()

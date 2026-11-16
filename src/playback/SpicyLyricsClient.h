@@ -85,10 +85,16 @@ public:
     QCoro::Task<std::optional<QByteArray>> fetchLyricsJson(QString trackId, QString apiKey,
                                                            bool bypassCache = false);
 
+    /// applies cached romanization/translation if present on disk without I/O wait;
+    /// returns true when uncached lines still need network enrichment.
+    bool applyCachedEnrichment(Lyrics &lyrics, const QString &cacheKey,
+                               bool wantRomanized, bool wantTranslated, const QString &targetLanguage) const;
+
     /// optionally fills missing romanized and/or translated lines using cached
     /// results or public translation requests, bounded to the 30-day cache TTL.
-    QCoro::Task<> enrichLyrics(Lyrics &lyrics, QString cacheKey,
-                               bool wantRomanized, bool wantTranslated, QString targetLanguage);
+    /// returns true when `lyrics` was updated with new entries.
+    QCoro::Task<bool> enrichLyrics(Lyrics &lyrics, QString cacheKey,
+                                     bool wantRomanized, bool wantTranslated, QString targetLanguage);
 
     static bool containsNonLatinLetters(const QString &text);
     static bool parseTranslateResponse(const QByteArray &json, QString *translatedOut, QString *romanizedOut);

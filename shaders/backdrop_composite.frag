@@ -45,7 +45,9 @@ void main()
 
     float y = qt_TexCoord0.y;
     float shade = y < 0.5 ? mix(0.26, 0.0, y * 2.0) : mix(0.0, 0.46, y * 2.0 - 1.0);
-    rgb *= (1.0 - shade) * 0.8;
+    // Keep bright/white album covers comfortably dark behind white lyrics.
+    float brightWash = mix(0.76, 0.34, smoothstep(0.22, 0.82, luma));
+    rgb *= (1.0 - shade) * brightWash;
     rgb += dither(gl_FragCoord.xy) / 255.0;
 
     fragColor = vec4(rgb, 1.0) * qt_Opacity;

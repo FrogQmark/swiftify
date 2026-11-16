@@ -48,6 +48,6 @@ void main()
 
     float mask = clamp(mix(baseAlpha, 1.0, lit), 0.0, 1.0);
     vec4 base = tex * mask;
-    vec3 bloom = mix(vec3(1.0), glowColor.rgb, 0.45) * (tex.a * edgeGlow * 0.45);
-    fragColor = (base + vec4(bloom, tex.a * edgeGlow * 0.25)) * qt_Opacity;
+    vec3 bloom = mix(vec3(1.0), glowColor.rgb, 0.55) * (tex.a * edgeGlow * 0.20);
+    fragColor = (base + vec4(bloom, tex.a * edgeGlow * 0.12)) * qt_Opacity;
 }

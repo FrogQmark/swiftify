@@ -46,7 +46,7 @@ namespace {
 
 const QString kApiBase = QStringLiteral("https://api.spicylyrics.org/v1/lyrics/");
 const QString kTranslateBase = QStringLiteral("https://translate.googleapis.com/translate_a/single");
-constexpr qsizetype kTranslateBatchSize = 20;
+constexpr qsizetype kTranslateBatchSize = 12;
 
 QString normalizeLine(const QString &text)
 {
@@ -192,6 +192,55 @@ bool payloadHasContent(const QJsonObject &root)
     }
     const QJsonValue body = root.value(QStringLiteral("Body"));
     return body.isObject() && body.toObject().contains(QStringLiteral("Content"));
+}
+
+QStringList splitNonEmptyLines(const QString &text)
+{
+    if (text.isEmpty()) {
+        return {};
+    }
+    return text.split(u'\n', Qt::SkipEmptyParts);
+}
+
+QString buildEnrichCachePath(const SpicyLyricsCache &cache, const QString &cacheKey,
+                             bool fetchRomanized, bool needTranslated, const QString &cleanLang)
+{
+    QString cacheSuffix = needTranslated ? cleanLang : QStringLiteral("rom");
+    if (fetchRomanized && needTranslated) {
+        cacheSuffix += QStringLiteral("_rom");
+    }
+    return cache.directory() + QStringLiteral("/translations/")
+        + sanitizeCacheKey(cacheKey, cacheSuffix) + QStringLiteral(".json");
+}
+
+bool enrichPlans(const Lyrics &lyrics, bool wantRomanized, bool wantTranslated, const QString &targetLanguage,
+                 bool &fetchRomanizedOut, bool &needTranslatedOut, QString &cleanLangOut, QStringList &allLinesOut)
+{
+    const bool needRomanized = wantRomanized && !lyrics.hasRomanized;
+    cleanLangOut = wantTranslated ? targetLanguage.trimmed() : QString();
+    needTranslatedOut = wantTranslated && !cleanLangOut.isEmpty();
+    if (!needRomanized && !needTranslatedOut) {
+        fetchRomanizedOut = false;
+        return false;
+    }
+
+    collectUniqueLines(lyrics, allLinesOut);
+    if (allLinesOut.isEmpty()) {
+        fetchRomanizedOut = false;
+        return false;
+    }
+
+    bool anyNonLatin = false;
+    if (needRomanized) {
+        for (const QString &line : allLinesOut) {
+            if (SpicyLyricsClient::containsNonLatinLetters(line)) {
+                anyNonLatin = true;
+                break;
+            }
+        }
+    }
+    fetchRomanizedOut = needRomanized && anyNonLatin;
+    return fetchRomanizedOut || needTranslatedOut;
 }
 
 } // namespace
@@ -444,71 +493,88 @@ bool SpicyLyricsClient::parseTranslateResponse(const QByteArray &json, QString *
     return !translated.isEmpty() || !romanized.isEmpty();
 }
 
-QCoro::Task<> SpicyLyricsClient::enrichLyrics(Lyrics &lyrics, QString cacheKey,
-                                              bool wantRomanized, bool wantTranslated, QString targetLanguage)
+bool SpicyLyricsClient::applyCachedEnrichment(Lyrics &lyrics, const QString &cacheKey,
+                                              bool wantRomanized, bool wantTranslated,
+                                              const QString &targetLanguage) const
 {
-    const bool needRomanized = wantRomanized && !lyrics.hasRomanized;
-    const QString cleanLang = wantTranslated ? targetLanguage.trimmed() : QString();
-    const bool needTranslated = wantTranslated && !cleanLang.isEmpty();
-    if (!needRomanized && !needTranslated) {
-        co_return;
-    }
-
+    bool fetchRomanized = false;
+    bool needTranslated = false;
+    QString cleanLang;
     QStringList allLines;
-    collectUniqueLines(lyrics, allLines);
-    if (allLines.isEmpty()) {
-        co_return;
+    if (!enrichPlans(lyrics, wantRomanized, wantTranslated, targetLanguage,
+                     fetchRomanized, needTranslated, cleanLang, allLines)) {
+        return false;
     }
 
-    bool anyNonLatin = false;
-    if (needRomanized) {
-        for (const QString &line : allLines) {
-            if (containsNonLatinLetters(line)) {
-                anyNonLatin = true;
-                break;
-            }
-        }
-    }
-    const bool fetchRomanized = needRomanized && anyNonLatin;
-    if (!fetchRomanized && !needTranslated) {
-        co_return;
-    }
-
-    QString cacheSuffix = needTranslated ? cleanLang : QStringLiteral("rom");
-    if (fetchRomanized && needTranslated) {
-        cacheSuffix += QStringLiteral("_rom");
-    }
-    const QString cacheFile = m_cache.directory() + QStringLiteral("/translations/")
-        + sanitizeCacheKey(cacheKey, cacheSuffix) + QStringLiteral(".json");
-
+    const QString cacheFile = buildEnrichCachePath(m_cache, cacheKey, fetchRomanized, needTranslated, cleanLang);
     QHash<QString, QString> translations;
     QHash<QString, QString> romanizations;
     readEnrichCache(cacheFile, translations, romanizations);
+    applyEnrichmentToLyrics(lyrics, fetchRomanized, needTranslated, translations, romanizations);
 
-    QStringList missing;
     for (const QString &line : allLines) {
         const bool missTrans = needTranslated && !translations.contains(line);
         const bool missRom = fetchRomanized && containsNonLatinLetters(line) && !romanizations.contains(line);
         if (missTrans || missRom) {
-            missing.append(line);
+            return true;
+        }
+    }
+    return false;
+}
+
+QCoro::Task<bool> SpicyLyricsClient::enrichLyrics(Lyrics &lyrics, QString cacheKey,
+                                                  bool wantRomanized, bool wantTranslated, QString targetLanguage)
+{
+    bool fetchRomanized = false;
+    bool needTranslated = false;
+    QString cleanLang;
+    QStringList allLines;
+    if (!enrichPlans(lyrics, wantRomanized, wantTranslated, targetLanguage,
+                     fetchRomanized, needTranslated, cleanLang, allLines)) {
+        co_return false;
+    }
+
+    const QString cacheFile = buildEnrichCachePath(m_cache, cacheKey, fetchRomanized, needTranslated, cleanLang);
+    QHash<QString, QString> translations;
+    QHash<QString, QString> romanizations;
+    readEnrichCache(cacheFile, translations, romanizations);
+
+    QStringList missingLatin;
+    QStringList missingNonLatin;
+    for (const QString &line : allLines) {
+        const bool nonLatin = containsNonLatinLetters(line);
+        const bool missTrans = needTranslated && !translations.contains(line);
+        const bool missRom = fetchRomanized && nonLatin && !romanizations.contains(line);
+        if (missTrans || missRom) {
+            if (nonLatin) {
+                missingNonLatin.append(line);
+            } else {
+                missingLatin.append(line);
+            }
         }
     }
 
-    if (!missing.isEmpty() && m_network) {
-        const auto requestBatch = [&](const QStringList &batch) -> QCoro::Task<std::pair<QStringList, QStringList>> {
+    bool updated = false;
+    if ((!missingLatin.isEmpty() || !missingNonLatin.isEmpty()) && m_network) {
+        bool aborted = false;
+        const auto requestBatch = [&](const QStringList &batch, bool includeRomanized)
+            -> QCoro::Task<std::pair<QStringList, QStringList>> {
+            if (aborted || batch.isEmpty()) {
+                co_return std::pair<QStringList, QStringList>{};
+            }
             QUrl url(kTranslateBase);
             QUrlQuery query;
             query.addQueryItem(QStringLiteral("client"), QStringLiteral("gtx"));
             query.addQueryItem(QStringLiteral("sl"), QStringLiteral("auto"));
             query.addQueryItem(QStringLiteral("tl"), needTranslated ? cleanLang : QStringLiteral("en"));
             query.addQueryItem(QStringLiteral("dt"), QStringLiteral("t"));
-            if (fetchRomanized) {
+            if (includeRomanized) {
                 query.addQueryItem(QStringLiteral("dt"), QStringLiteral("rm"));
             }
             url.setQuery(query);
 
             QNetworkRequest request(url);
-            request.setTransferTimeout(10'000);
+            request.setTransferTimeout(6'000);
             request.setHeader(QNetworkRequest::ContentTypeHeader,
                               QStringLiteral("application/x-www-form-urlencoded; charset=UTF-8"));
             request.setRawHeader("Accept", "application/json");
@@ -519,6 +585,7 @@ QCoro::Task<> SpicyLyricsClient::enrichLyrics(Lyrics &lyrics, QString cacheKey,
 
             const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             if (reply->error() != QNetworkReply::NoError || status == 0 || status < 200 || status >= 300) {
+                aborted = true;
                 co_return std::pair<QStringList, QStringList>{};
             }
             QString translatedText;
@@ -527,48 +594,116 @@ QCoro::Task<> SpicyLyricsClient::enrichLyrics(Lyrics &lyrics, QString cacheKey,
                 co_return std::pair<QStringList, QStringList>{};
             }
             co_return std::pair<QStringList, QStringList>{
-                translatedText.isEmpty() ? QStringList{} : translatedText.split(u'\n'),
-                romanizedText.isEmpty() ? QStringList{} : romanizedText.split(u'\n')
+                splitNonEmptyLines(translatedText),
+                splitNonEmptyLines(romanizedText)
             };
         };
 
-        bool updated = false;
-        for (qsizetype offset = 0; offset < missing.size(); offset += kTranslateBatchSize) {
-            const QStringList batch = missing.mid(offset, kTranslateBatchSize);
-            auto [transLines, romLines] = co_await requestBatch(batch);
-            const bool transOk = !needTranslated || transLines.size() == batch.size();
-            const bool romOk = !fetchRomanized || romLines.size() == batch.size();
-            if (transOk && romOk) {
-                for (qsizetype i = 0; i < batch.size(); ++i) {
-                    if (needTranslated && i < transLines.size()) {
-                        translations.insert(batch.at(i), transLines.at(i).trimmed());
-                        updated = true;
-                    }
-                    if (fetchRomanized && i < romLines.size()) {
-                        romanizations.insert(batch.at(i), romLines.at(i).trimmed());
-                        updated = true;
-                    }
+        const auto recordMatched = [&](const QStringList &batch, bool includeRomanized,
+                                       const QStringList &transLines, const QStringList &romLines) {
+            const bool transOk = needTranslated && transLines.size() == batch.size();
+            const bool romOk = includeRomanized && romLines.size() == batch.size();
+            if (!transOk && !romOk) {
+                return false;
+            }
+            for (qsizetype i = 0; i < batch.size(); ++i) {
+                if (transOk) {
+                    translations.insert(batch.at(i), transLines.at(i).trimmed());
+                    updated = true;
                 }
-            } else if (batch.size() > 1) {
-                for (const QString &single : batch) {
-                    auto [oneTrans, oneRom] = co_await requestBatch({single});
-                    if (needTranslated && !oneTrans.isEmpty()) {
-                        translations.insert(single, oneTrans.join(u' ').trimmed());
-                        updated = true;
-                    }
-                    if (fetchRomanized && !oneRom.isEmpty()) {
-                        romanizations.insert(single, oneRom.join(u' ').trimmed());
-                        updated = true;
+                if (romOk) {
+                    romanizations.insert(batch.at(i), romLines.at(i).trimmed());
+                    updated = true;
+                }
+            }
+            return (!needTranslated || transOk) && (!includeRomanized || romOk);
+        };
+
+        const auto processMissing = [&](const QStringList &list, bool includeRomanized) -> QCoro::Task<> {
+            for (qsizetype offset = 0; !aborted && offset < list.size(); offset += kTranslateBatchSize) {
+                const QStringList batch = list.mid(offset, kTranslateBatchSize);
+                auto [transLines, romLines] = co_await requestBatch(batch, includeRomanized);
+                if (aborted) {
+                    break;
+                }
+                if (!recordMatched(batch, includeRomanized, transLines, romLines) && batch.size() > 1) {
+                    // Split once into halves rather than flooding Google with per-line requests.
+                    const qsizetype mid = batch.size() / 2;
+                    for (const QStringList &half : {batch.mid(0, mid), batch.mid(mid)}) {
+                        if (aborted) {
+                            break;
+                        }
+                        auto [hTrans, hRom] = co_await requestBatch(half, includeRomanized);
+                        recordMatched(half, includeRomanized, hTrans, hRom);
                     }
                 }
             }
+        };
+
+        if (!missingNonLatin.isEmpty()) {
+            co_await processMissing(missingNonLatin, fetchRomanized);
+        }
+        if (!missingLatin.isEmpty() && needTranslated && !aborted) {
+            co_await processMissing(missingLatin, false);
         }
         if (updated) {
             writeEnrichCache(cacheFile, translations, romanizations);
         }
     }
 
+    const bool beforeRom = lyrics.hasRomanized;
+    const bool beforeTrans = lyrics.hasTranslations;
     applyEnrichmentToLyrics(lyrics, fetchRomanized, needTranslated, translations, romanizations);
+    co_return updated || lyrics.hasRomanized != beforeRom || lyrics.hasTranslations != beforeTrans;
+}
+
+QStringList splitNonEmptyLines(const QString &text)
+{
+    if (text.isEmpty()) {
+        return {};
+    }
+    return text.split(u'\n', Qt::SkipEmptyParts);
+}
+
+QString buildEnrichCachePath(const SpicyLyricsCache &cache, const QString &cacheKey,
+                             bool fetchRomanized, bool needTranslated, const QString &cleanLang)
+{
+    QString cacheSuffix = needTranslated ? cleanLang : QStringLiteral("rom");
+    if (fetchRomanized && needTranslated) {
+        cacheSuffix += QStringLiteral("_rom");
+    }
+    return cache.directory() + QStringLiteral("/translations/")
+        + sanitizeCacheKey(cacheKey, cacheSuffix) + QStringLiteral(".json");
+}
+
+bool enrichPlans(const Lyrics &lyrics, bool wantRomanized, bool wantTranslated, const QString &targetLanguage,
+                 bool &fetchRomanizedOut, bool &needTranslatedOut, QString &cleanLangOut, QStringList &allLinesOut)
+{
+    const bool needRomanized = wantRomanized && !lyrics.hasRomanized;
+    cleanLangOut = wantTranslated ? targetLanguage.trimmed() : QString();
+    needTranslatedOut = wantTranslated && !cleanLangOut.isEmpty();
+    if (!needRomanized && !needTranslatedOut) {
+        fetchRomanizedOut = false;
+        return false;
+    }
+
+    collectUniqueLines(lyrics, allLinesOut);
+    if (allLinesOut.isEmpty()) {
+        fetchRomanizedOut = false;
+        return false;
+    }
+
+    bool anyNonLatin = false;
+    if (needRomanized) {
+        for (const QString &line : allLinesOut) {
+            if (SpicyLyricsClient::containsNonLatinLetters(line)) {
+                anyNonLatin = true;
+                break;
+            }
+        }
+    }
+    fetchRomanizedOut = needRomanized && anyNonLatin;
+    return fetchRomanizedOut || needTranslatedOut;
 }
 
 } // namespace swiftify

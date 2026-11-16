@@ -31,6 +31,7 @@ Item {
 
     property MaterialScheme scheme: PlayerStyle.darkScheme
     readonly property color glow: Qt.rgba(PlayerStyle.primary.r, PlayerStyle.primary.g, PlayerStyle.primary.b, 0.5)
+    readonly property real renderScale: Math.max(1.0, root.Window.window ? root.Window.window.devicePixelRatio : 1.0)
 
     // Smooth sub-250ms position driven off UiState.spin only while playing and
     // visible, so an idle or paused window draws nothing at rest.
@@ -52,25 +53,20 @@ Item {
         implicitWidth: mainText.implicitWidth
         implicitHeight: mainText.implicitHeight
 
-        // Per-word / per-letter halo bloom while this syllable or letter is sung
+        // Per-word / per-letter subtle glow behind actively sung text
         StyledText {
             visible: glyph.glowStrength > 0.01 && !Appearance.performanceMode
             text: glyph.text
             font.pixelSize: glyph.fontSize
             font.weight: glyph.fontWeight
-            color: Qt.lighter(PlayerStyle.primary, 1.45)
-            opacity: glyph.glowStrength * 0.85
+            color: PlayerStyle.primary
+            opacity: glyph.glowStrength * 0.35
             layer.enabled: visible
+            layer.smooth: true
             layer.effect: MultiEffect {
                 blurEnabled: true
-                blur: 0.85
-                blurMax: 22
-                shadowEnabled: true
-                shadowColor: PlayerStyle.primary
-                shadowOpacity: 0.9
-                shadowBlur: 1.0
-                shadowHorizontalOffset: 0
-                shadowVerticalOffset: 0
+                blur: 0.55
+                blurMax: 14
             }
         }
 
@@ -80,9 +76,13 @@ Item {
             font.pixelSize: glyph.fontSize
             font.weight: glyph.fontWeight
             color: "white"
-            opacity: (layer.enabled || !glyph.lineActive || !Player.lyricsSynchronized) ? 1.0 : 0.36
+            opacity: (layer.enabled || !glyph.lineActive || !Player.lyricsSynchronized || glyph.progress >= 1) ? 1.0 : 0.36
 
             layer.enabled: glyph.lineActive && Player.lyricsSynchronized && !Appearance.performanceMode
+                && glyph.progress > 0 && glyph.progress < 1
+            layer.smooth: true
+            layer.textureSize: Qt.size(Math.max(1, Math.ceil(Math.max(mainText.width, mainText.implicitWidth) * root.renderScale * 2.0)),
+                                       Math.max(1, Math.ceil(Math.max(mainText.height, mainText.implicitHeight) * root.renderScale * 2.0)))
             layer.effect: ShaderEffect {
                 property variant source
                 property color glowColor: Qt.rgba(PlayerStyle.primary.r, PlayerStyle.primary.g, PlayerStyle.primary.b, 1.0)
@@ -99,7 +99,8 @@ Item {
             clip: true
             width: glyph.width * glyph.progress
             height: glyph.height
-            visible: Appearance.performanceMode && glyph.lineActive && Player.lyricsSynchronized && width > 0
+            visible: Appearance.performanceMode && glyph.lineActive && Player.lyricsSynchronized
+                && glyph.progress > 0 && glyph.progress < 1 && width > 0
 
             StyledText {
                 text: glyph.text
@@ -530,12 +531,12 @@ Item {
                 NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
             }
 
-            // the sung line sits on a scalloped pill
+            // the sung line sits on a dark tinted scalloped pill for contrast
             WavyPill {
                 objectName: "lyricHighlight"
                 anchors.fill: parent
                 cornerRadius: 32
-                color: Qt.rgba(1, 1, 1, line.active && Player.lyricsSynchronized ? 0.07 : 0)
+                color: Qt.rgba(0, 0, 0, line.active && Player.lyricsSynchronized ? 0.28 : 0)
 
                 Behavior on color {
                     ColorAnimation { duration: Appearance.duration(320); easing.type: Easing.InOutQuad }
@@ -545,7 +546,7 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 radius: 20
-                color: Qt.rgba(1, 1, 1, line.highlighted ? 0.13 : 0)
+                color: Qt.rgba(0, 0, 0, line.highlighted ? 0.22 : 0)
 
                 Behavior on color {
                     ColorAnimation { duration: Appearance.duration(180); easing.type: Easing.OutQuad }
@@ -556,23 +557,22 @@ Item {
                 id: textContainer
                 width: parent.width
                 height: parent.height
-                opacity: line.active ? 1 : 0.28
+                opacity: line.active ? 1 : 0.34
 
                 Behavior on opacity {
                     NumberAnimation { duration: Appearance.duration(320); easing.type: Easing.InOutQuad }
                 }
 
-                layer.enabled: line.nearViewport && (line.glowStrength > 0.01 || line.blurStrength > 0.01)
+                // Only rasterize into a blur layer for inactive lines so active
+                // lyrics, romanization, and translations stay razor-sharp.
+                layer.enabled: line.nearViewport && line.blurStrength > 0.01 && !Appearance.performanceMode
+                layer.smooth: true
+                layer.textureSize: Qt.size(Math.max(1, Math.ceil(textContainer.width * root.renderScale)),
+                                           Math.max(1, Math.ceil(textContainer.height * root.renderScale)))
                 layer.effect: MultiEffect {
-                    shadowEnabled: line.glowStrength > 0.01
-                    shadowColor: root.glow
-                    shadowOpacity: line.glowStrength
-                    shadowBlur: 1
-                    blurEnabled: line.blurStrength > 0.01 && !Appearance.performanceMode
+                    blurEnabled: true
                     blur: line.blurStrength
                     blurMax: 24
-                    shadowHorizontalOffset: 0
-                    shadowVerticalOffset: 0
                 }
 
                 // Kept visible for line-synced / unsynced lyrics and tests
